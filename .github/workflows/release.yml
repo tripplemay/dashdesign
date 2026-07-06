@@ -60,7 +60,16 @@ jobs:
         run: |
           CERT_PATH="$RUNNER_TEMP/dashdesign-signing.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/dashdesign-signing.keychain-db"
-          echo "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          export CERT_PATH
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          Path(os.environ["CERT_PATH"]).write_bytes(
+              base64.b64decode(os.environ["MACOS_CERTIFICATE_BASE64"])
+          )
+          PY
           security create-keychain -p "" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "" "$KEYCHAIN_PATH"
