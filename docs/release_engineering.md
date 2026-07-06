@@ -122,9 +122,14 @@ The Qt client supports a manifest-based update check. Configure:
 export DASHDESIGN_UPDATE_MANIFEST_URL="https://github.com/ORG/REPO/releases/latest/download/update-manifest.json"
 ```
 
-The app checks this URL on startup when configured, compares the manifest version
-with `APP_VERSION`, and opens the platform installer download URL when a newer
-version exists.
+The release workflow writes the same URL into `UPDATE_MANIFEST_URL` before
+packaging, so release builds can check for updates without requiring an
+environment variable. The environment variable remains an override for staging
+or private update channels.
+
+The app checks the manifest URL on startup when configured, compares the
+manifest version with `APP_VERSION`, and opens the platform installer download
+URL when a newer version exists.
 
 Generated manifest example:
 

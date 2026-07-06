@@ -68,7 +68,7 @@ macos.permissions =
 mode = standalone
 
 # specify any extra nuitka arguments
-extra_args = --quiet --noinclude-qt-translations --include-qt-plugins=imageformats,platforminputcontexts,styles --include-package=PIL --include-package=cv2 --include-package=numpy --include-package=requests --include-data-dir=scripts=scripts --include-data-dir=tools=tools --include-data-files=requirements.txt=requirements.txt --include-data-files=requirements-desktop.txt=requirements-desktop.txt --include-data-files=VERSION=VERSION
+extra_args = --quiet --noinclude-qt-translations --include-qt-plugins=imageformats,platforminputcontexts,styles --include-package=PIL --include-package=cv2 --include-package=numpy --include-package=requests --include-data-dir=scripts=scripts --include-data-dir=tools=tools --include-data-files=requirements.txt=requirements.txt --include-data-files=requirements-desktop.txt=requirements-desktop.txt --include-data-files=VERSION=VERSION --include-data-files=UPDATE_MANIFEST_URL=UPDATE_MANIFEST_URL
 
 [buildozer]
 

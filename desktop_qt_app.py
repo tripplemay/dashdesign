@@ -62,6 +62,20 @@ def read_app_version() -> str:
     return os.environ.get("DASHDESIGN_VERSION", "0.1.0").lstrip("v")
 
 
+def configured_update_manifest_url() -> str:
+    env_url = os.environ.get("DASHDESIGN_UPDATE_MANIFEST_URL", "").strip()
+    if env_url:
+        return env_url
+    for candidate in (APP_ROOT / "UPDATE_MANIFEST_URL", PROJECT_ROOT / "UPDATE_MANIFEST_URL"):
+        try:
+            value = candidate.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return ""
+
+
 APP_VERSION = read_app_version()
 
 
@@ -244,7 +258,7 @@ class DashDesignQtApp(QMainWindow):
         self._build_ui()
         self._apply_style()
         self.statusBar().showMessage(f"Qt {qVersion()} · 就绪")
-        if os.environ.get("DASHDESIGN_UPDATE_MANIFEST_URL"):
+        if configured_update_manifest_url():
             QTimer.singleShot(1600, lambda: self.check_for_updates(silent=True))
 
     def _build_actions(self) -> None:
@@ -882,7 +896,7 @@ class DashDesignQtApp(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def check_for_updates(self, silent: bool = False) -> None:
-        manifest_url = os.environ.get("DASHDESIGN_UPDATE_MANIFEST_URL", "").strip()
+        manifest_url = configured_update_manifest_url()
         if not manifest_url:
             if not silent:
                 QMessageBox.information(

@@ -45,7 +45,9 @@ jobs:
           python -m pip install -r requirements.txt -r requirements-desktop.txt
 
       - name: Set app version
-        run: echo "${VERSION#v}" > VERSION
+        run: |
+          echo "${VERSION#v}" > VERSION
+          echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update-manifest.json" > UPDATE_MANIFEST_URL
 
       - name: Bootstrap runtime assets
         run: ./scripts/bootstrap_runtime_assets.sh
@@ -121,7 +123,9 @@ jobs:
 
       - name: Set app version
         shell: bash
-        run: echo "${VERSION#v}" > VERSION
+        run: |
+          echo "${VERSION#v}" > VERSION
+          echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update-manifest.json" > UPDATE_MANIFEST_URL
 
       - name: Bootstrap runtime assets
         shell: bash
