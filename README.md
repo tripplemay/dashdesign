@@ -29,7 +29,7 @@ python3 -m venv .venv
 ## Package
 
 ```bash
-./scripts/package_qt_app.sh
+./scripts/package_pyinstaller_app.sh
 ```
 
 ## Release Engineering

@@ -85,6 +85,11 @@ def is_packaged() -> bool:
 
 def worker_prefix() -> list[str]:
     if is_packaged():
+        executable_dir = Path(sys.executable).resolve().parent
+        worker_name = "DashDesignWorker.exe" if sys.platform.startswith("win") else "DashDesignWorker"
+        worker_executable = executable_dir / worker_name
+        if worker_executable.exists():
+            return [str(worker_executable), "--worker"]
         return [str(Path(sys.executable).resolve()), "--worker"]
     return [PYTHON, str(PROJECT_ROOT / "desktop_qt_app.py"), "--worker"]
 

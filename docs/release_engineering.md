@@ -25,7 +25,8 @@ GitHub Actions workflows:
 
 - `.github/workflows/ci.yml`
   - Runs on macOS and Windows.
-  - Installs Python, runtime dependencies, and PySide6 Essentials.
+  - Installs Python, runtime dependencies, PySide6 Essentials, and packaging
+    dependencies.
   - Compiles Python files.
   - Starts the Qt client offscreen and validates worker command wiring.
 - `.github/workflows/release.yml`
@@ -52,16 +53,25 @@ the current platform and copies the binary/models into `tools/`.
 Local packaging entrypoint:
 
 ```bash
-./scripts/package_qt_app.sh
+./scripts/package_pyinstaller_app.sh
 ```
 
-The packaging config is `pysidedeploy.spec`. It builds standalone output and
-includes:
+The default release packaging config is `dashdesign_pyinstaller.spec`. It builds
+standalone output and includes:
 
 - `desktop_qt_app.py`
+- `dashdesign_worker.py`
 - `scripts/`
 - `tools/`
+- `requirements.txt`
 - `requirements-desktop.txt`
+- `VERSION`
+- `UPDATE_MANIFEST_URL`
+
+`scripts/package_qt_app.sh` and `pysidedeploy.spec` are retained as an
+experimental PySide Deploy/Nuitka path. The GitHub Release workflow uses
+PyInstaller because it produced the same Qt desktop surface with faster and more
+observable CI packaging.
 
 ## macOS Signing And Notarization
 

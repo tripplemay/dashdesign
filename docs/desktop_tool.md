@@ -96,12 +96,17 @@ output.
 The current packaging entrypoint is:
 
 ```bash
-./scripts/package_qt_app.sh
+./scripts/package_pyinstaller_app.sh
 ```
 
-It uses the official `pyside6-deploy` tool and builds a standalone desktop app
-for the current platform. On macOS the expected artifact is a `.app`; on
-Windows the expected artifact is an `.exe`.
+It uses PyInstaller and builds a standalone desktop app for the current
+platform. On macOS the expected artifact is a `.app`; on Windows the expected
+artifact is a packaged executable directory consumed by the Inno Setup
+installer.
+
+`scripts/package_qt_app.sh` and `pysidedeploy.spec` remain in the repository as
+an experimental PySide Deploy/Nuitka path, but CI/CD uses PyInstaller because it
+is faster and easier to observe in GitHub Actions for this project.
 
 Release engineering scripts are available for:
 
