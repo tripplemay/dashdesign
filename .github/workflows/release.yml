@@ -75,9 +75,13 @@ jobs:
       - name: Find app bundle
         id: app
         run: |
-          APP_PATH="$(find . -type d -name 'DashDesign.app' | head -n 1)"
+          APP_PATH="dist/DashDesign.app"
           if [[ -z "$APP_PATH" ]]; then
             echo "DashDesign.app was not produced" >&2
+            exit 1
+          fi
+          if [[ ! -d "$APP_PATH" ]]; then
+            echo "DashDesign.app was not produced at $APP_PATH" >&2
             exit 1
           fi
           echo "path=$APP_PATH" >> "$GITHUB_OUTPUT"
@@ -141,8 +145,8 @@ jobs:
         id: exe
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Recurse -Filter "DashDesign.exe" | Select-Object -First 1
-          if (-not $exe) { throw "DashDesign.exe was not produced" }
+          $exe = Get-Item "dist\DashDesign\DashDesign.exe" -ErrorAction SilentlyContinue
+          if (-not $exe) { throw "DashDesign.exe was not produced at dist\DashDesign\DashDesign.exe" }
           "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
           "dir=$($exe.Directory.FullName)" >> $env:GITHUB_OUTPUT
 

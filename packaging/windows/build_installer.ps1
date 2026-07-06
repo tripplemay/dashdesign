@@ -6,6 +6,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$SourceDir = (Resolve-Path $SourceDir).Path
+if (-not (Test-Path $OutputDir)) {
+    New-Item -ItemType Directory -Path $OutputDir | Out-Null
+}
+$OutputDir = (Resolve-Path $OutputDir).Path
+
 $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 if (-not $iscc) {
     $default = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
