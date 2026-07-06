@@ -20,10 +20,10 @@ hdiutil create \
   -srcfolder "$APP_PATH" \
   -ov \
   -format UDZO \
-  "$DMG_PATH"
+  "$DMG_PATH" >&2
 
 if [[ -n "${MACOS_CODESIGN_IDENTITY:-}" ]]; then
-  codesign --force --timestamp --sign "$MACOS_CODESIGN_IDENTITY" "$DMG_PATH"
+  codesign --force --timestamp --sign "$MACOS_CODESIGN_IDENTITY" "$DMG_PATH" >&2
 fi
 
 echo "$DMG_PATH"
