@@ -1,0 +1,231 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: DashDesign
+
+jobs:
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ github.event.inputs.version || github.ref_name }}
+      MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_NOTARY_KEYCHAIN_PROFILE: ${{ secrets.APPLE_NOTARY_KEYCHAIN_PROFILE }}
+      HAS_MAC_CERT: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-desktop.txt
+
+      - name: Set app version
+        run: echo "${VERSION#v}" > VERSION
+
+      - name: Bootstrap runtime assets
+        run: ./scripts/bootstrap_runtime_assets.sh
+
+      - name: Import signing certificate
+        if: env.HAS_MAC_CERT == 'true'
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/dashdesign-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/dashdesign-signing.keychain-db"
+          echo "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH"
+
+      - name: Build app
+        run: ./scripts/package_qt_app.sh
+
+      - name: Find app bundle
+        id: app
+        run: |
+          APP_PATH="$(find . -type d -name 'DashDesign.app' | head -n 1)"
+          if [[ -z "$APP_PATH" ]]; then
+            echo "DashDesign.app was not produced" >&2
+            exit 1
+          fi
+          echo "path=$APP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Sign and notarize app
+        if: env.HAS_MAC_CERT == 'true'
+        run: ./packaging/macos/sign_notarize.sh "${{ steps.app.outputs.path }}"
+
+      - name: Create DMG
+        id: dmg
+        run: |
+          VERSION_CLEAN="${VERSION#v}"
+          DMG_PATH="$(./packaging/macos/create_dmg.sh '${{ steps.app.outputs.path }}' "$VERSION_CLEAN")"
+          echo "path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: ${{ steps.dmg.outputs.path }}
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ github.event.inputs.version || github.ref_name }}
+      HAS_WIN_CERT: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' || secrets.WINDOWS_SIGN_CERT_PATH != '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-desktop.txt
+
+      - name: Set app version
+        shell: bash
+        run: echo "${VERSION#v}" > VERSION
+
+      - name: Bootstrap runtime assets
+        shell: bash
+        run: ./scripts/bootstrap_runtime_assets.sh
+
+      - name: Build app
+        shell: bash
+        run: ./scripts/package_qt_app.sh
+
+      - name: Find executable
+        id: exe
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse -Filter "DashDesign.exe" | Select-Object -First 1
+          if (-not $exe) { throw "DashDesign.exe was not produced" }
+          "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          "dir=$($exe.Directory.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Sign executable
+        if: env.HAS_WIN_CERT == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_SIGN_CERT_PATH: ${{ secrets.WINDOWS_SIGN_CERT_PATH }}
+          WINDOWS_SIGN_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGN_CERT_PASSWORD }}
+        run: ./packaging/windows/sign.ps1 -Path "${{ steps.exe.outputs.path }}"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        id: installer
+        shell: pwsh
+        run: |
+          $version = "${env:VERSION}".TrimStart("v")
+          ./packaging/windows/build_installer.ps1 -Version $version -SourceDir "${{ steps.exe.outputs.dir }}" -OutputDir "dist"
+          $setup = Get-ChildItem dist -Filter "*windows-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Windows installer was not produced" }
+          "path=$($setup.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Sign installer
+        if: env.HAS_WIN_CERT == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_SIGN_CERT_PATH: ${{ secrets.WINDOWS_SIGN_CERT_PATH }}
+          WINDOWS_SIGN_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGN_CERT_PASSWORD }}
+        run: ./packaging/windows/sign.ps1 -Path "${{ steps.installer.outputs.path }}"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: ${{ steps.installer.outputs.path }}
+
+  publish:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [build-macos, build-windows]
+    env:
+      VERSION: ${{ github.event.inputs.version || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p dist
+          find release-assets -maxdepth 3 -type f -print -exec cp {} dist/ \;
+          ls -lah dist
+
+      - name: Generate update manifest
+        run: |
+          VERSION_CLEAN="${VERSION#v}"
+          MACOS_FILE="$(find dist -name '*macos.dmg' | head -n 1)"
+          WINDOWS_FILE="$(find dist -name '*windows-setup.exe' | head -n 1)"
+          test -n "$MACOS_FILE"
+          test -n "$WINDOWS_FILE"
+          MACOS_NAME="$(basename "$MACOS_FILE")"
+          WINDOWS_NAME="$(basename "$WINDOWS_FILE")"
+          BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
+          python scripts/generate_update_manifest.py \
+            --version "$VERSION_CLEAN" \
+            --notes "DashDesign ${VERSION_CLEAN}" \
+            --macos-url "${BASE_URL}/${MACOS_NAME}" \
+            --windows-url "${BASE_URL}/${WINDOWS_NAME}" \
+            --macos-file "$MACOS_FILE" \
+            --windows-file "$WINDOWS_FILE" \
+            --output dist/update-manifest.json
+
+      - name: Create or update GitHub Release
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" dist/* --clobber
+          else
+            gh release create "$VERSION" dist/* --title "$VERSION" --notes "DashDesign ${VERSION#v}"
+          fi

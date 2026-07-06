@@ -1,0 +1,54 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.venv/
+venv/
+
+# Local image inputs and generated print outputs.
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.tif
+*.tiff
+*.bmp
+!assets/**
+!docs/**/*.png
+
+print_ready*/
+print_samples*/
+quality_eval/
+single_no_qr*/
+workflow_samples/
+
+# Runtime model/binary assets are bootstrapped by scripts/bootstrap_runtime_assets.sh.
+tools/realesrgan-ncnn-vulkan
+tools/realesrgan-ncnn-vulkan.exe
+tools/models/
+tools/sr_models/
+
+# Packaging/build outputs.
+.cache/
+build/
+dist/
+*.app/
+*.dmg
+*.zip
+*.exe
+*.msi
+*.pkg
+
+# Secrets and signing material must never be committed.
+*.p12
+*.pfx
+*.cer
+*.crt
+*.key
+*.mobileprovision
+*.notarytool-profile
+.env
+.env.*
