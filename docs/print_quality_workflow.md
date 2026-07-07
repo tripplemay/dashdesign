@@ -1,7 +1,7 @@
 # Print Quality Workflow
 
-This project uses two complementary workflows for turning low-resolution
-agent-generated posters into print assets.
+This project uses complementary workflows for turning low-resolution
+agent-generated posters or text prompts into print assets.
 
 ## Workflow A: Faithful Repair
 
@@ -87,6 +87,47 @@ looser creative exploration.
 The script deliberately asks `gpt-image-2` not to render readable text, QR codes,
 prices, or logos. These must be rebuilt as separate controlled layers.
 
+## Workflow C: Baseline Text-to-Image
+
+Use when the source is a text brief instead of an existing poster image.
+
+Pipeline:
+
+1. Load the current project baseline from `docs/baseline/baseline.v1.draft.json`.
+2. Inject only the to-C parent/student baseline, visual guidelines, and prompt
+   policy into the final image prompt.
+3. Create an Image API request package for `gpt-image-2`.
+4. Optionally execute the Image API call to generate a master image.
+5. Optionally resize the master to the requested centimeter size and DPI.
+
+Command to prepare a package:
+
+```bash
+python3 scripts/text_to_image_print.py \
+  --width-cm 120 \
+  --height-cm 80 \
+  --dpi 200 \
+  --output-dir workflow_samples/text_to_image_print \
+  --prompt '明亮未来教室中，孩子用平板进行 AI 数字艺术创作，画面包含绘图、视频、漫剧和网页设计的抽象视觉元素，顶部和底部预留文案区域。'
+```
+
+To execute the Image API call after configuring credentials:
+
+```bash
+export OPENAI_API_KEY=...
+export OPENAI_BASE_URL=https://api.openai.com/v1
+python3 scripts/text_to_image_print.py \
+  --width-cm 120 \
+  --height-cm 80 \
+  --dpi 200 \
+  --prompt '明亮未来教室中，孩子用平板进行 AI 数字艺术创作，画面包含绘图、视频、漫剧和网页设计的抽象视觉元素。' \
+  --execute \
+  --postprocess-print
+```
+
+This workflow blocks prompts containing the current C-side baseline's forbidden
+B-side business terms unless explicitly overridden for development.
+
 ## GPT Image Constraints
 
 The OpenAI image generation guide says `gpt-image-2` supports arbitrary sizes
@@ -103,6 +144,7 @@ Image output is therefore a master layer, not the final print file.
 ## Current Prototype Status
 
 - Faithful 200 DPI sample generation is fully runnable locally.
+- Baseline text-to-image package generation is runnable locally.
 - GPT Image rebuild package generation is runnable locally.
 - Actual GPT Image execution is blocked until `OPENAI_API_KEY` is configured.
 - OCR/QR/logo reconstruction is not yet implemented in this environment.

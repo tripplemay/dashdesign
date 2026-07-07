@@ -35,7 +35,27 @@ and student poster baseline. This page is read-only for now. It is the local
 preview surface for the future cloud-synchronized baseline service and
 text-to-image prompt injection.
 
-### 2. Batch Print
+### 2. Text-to-Image
+
+Calls `scripts/text_to_image_print.py`.
+
+Use this when you want to generate a new poster background from text while
+automatically injecting the current project baseline. The workflow uses only the
+to-C parent/student baseline fields, visual guidelines, and prompt policy. It
+does not inject the raw to-B partnership terms from the source documents.
+
+If `Execute API` is not checked, the tool creates an offline package containing
+the final prompt, baseline context, request JSON, and generation record. If
+checked, `OPENAI_API_KEY` is passed only as an environment variable for that
+process and is not written to project files. When print post-processing is
+enabled, the generated master is resized to the requested centimeter size and
+DPI.
+
+The image model is instructed to generate background and main visual artwork
+only. Final headline text, course copy, phone numbers, logos, QR codes, and
+prices remain controlled production layers outside the model output.
+
+### 3. Batch Print
 
 Two modes are available:
 
@@ -49,7 +69,7 @@ logo positions, and QR-code positions. It does not rebuild text or QR codes.
 The basic mode is the stable PIL/Lanczos fallback. It is useful when
 Real-ESRGAN is not needed or when you want the simplest deterministic output.
 
-### 3. GPT Rebuild
+### 4. GPT Rebuild
 
 Calls `scripts/gpt_image_rebuild.py`.
 
@@ -58,7 +78,7 @@ poster. If `Execute API` is not checked, the tool only creates the request
 package. If checked, `OPENAI_API_KEY` is passed only as an environment variable
 for that process and is not written to project files.
 
-### 4. Remove QR Area
+### 5. Remove QR Area
 
 Calls `scripts/remove_qr_area.py`.
 
@@ -95,7 +115,7 @@ output.
 - Integrated image preview with fit, 100%, zoom in, zoom out, wheel zoom, and
   drag-and-drop.
 - `QProcess` execution so the UI remains responsive while local workflows run.
-- GPT API keys are passed only as process environment variables and are not
+- Image API keys are passed only as process environment variables and are not
   written to project files.
 
 ## Packaging

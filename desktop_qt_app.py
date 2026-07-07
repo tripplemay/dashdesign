@@ -344,6 +344,7 @@ class DashDesignQtApp(QMainWindow):
         self.nav.setSpacing(2)
         for key, label in [
             ("baseline", "项目基线"),
+            ("text-image", "文生图"),
             ("batch", "批量印刷"),
             ("gpt", "GPT 重建"),
             ("qr", "去二维码留空"),
@@ -377,6 +378,7 @@ class DashDesignQtApp(QMainWindow):
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.stack = QStackedWidget()
         self.stack.addWidget(self._make_baseline_page())
+        self.stack.addWidget(self._make_text_image_page())
         self.stack.addWidget(self._make_batch_page())
         self.stack.addWidget(self._make_gpt_page())
         self.stack.addWidget(self._make_qr_page())
@@ -526,6 +528,75 @@ class DashDesignQtApp(QMainWindow):
                 ]
             )
         return "\n".join(sections).strip() + "\n"
+
+    def _make_text_image_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        paths = QGroupBox("基线与输出")
+        path_layout = QVBoxLayout(paths)
+        self.t2i_output = PathField(
+            "输出目录",
+            str(PROJECT_ROOT / "workflow_samples" / "text_to_image_print_qt"),
+            "dir",
+        )
+        path_layout.addWidget(QLabel(f"基线文件：{baseline_path()}"))
+        path_layout.addWidget(self.t2i_output)
+        layout.addWidget(paths)
+
+        prompt_box = QGroupBox("提示词")
+        prompt_layout = QVBoxLayout(prompt_box)
+        self.t2i_prompt = QPlainTextEdit()
+        self.t2i_prompt.setObjectName("TextPrompt")
+        self.t2i_prompt.setPlaceholderText("描述这次要生成的海报背景、场景、主体、氛围和构图要求。")
+        self.t2i_prompt.setMinimumHeight(130)
+        prompt_layout.addWidget(self.t2i_prompt)
+        layout.addWidget(prompt_box)
+
+        params = QGroupBox("生成与印刷参数")
+        params_layout = QGridLayout(params)
+        self.t2i_width_cm = QLineEdit("120")
+        self.t2i_height_cm = QLineEdit("80")
+        self.t2i_dpi = QLineEdit("200")
+        self.t2i_image_size = QComboBox()
+        self.t2i_image_size.addItems(["auto", "1536x1024", "1024x1536", "1024x1024"])
+        self.t2i_quality = QComboBox()
+        self.t2i_quality.addItems(["high", "medium", "low", "auto"])
+        self.t2i_execute = QCheckBox("立即调用 API")
+        self.t2i_postprocess = QCheckBox("生成后输出印刷尺寸")
+        self.t2i_postprocess.setChecked(True)
+        params_layout.addWidget(QLabel("宽 cm"), 0, 0)
+        params_layout.addWidget(self.t2i_width_cm, 0, 1)
+        params_layout.addWidget(QLabel("高 cm"), 1, 0)
+        params_layout.addWidget(self.t2i_height_cm, 1, 1)
+        params_layout.addWidget(QLabel("DPI"), 2, 0)
+        params_layout.addWidget(self.t2i_dpi, 2, 1)
+        params_layout.addWidget(QLabel("模型尺寸"), 3, 0)
+        params_layout.addWidget(self.t2i_image_size, 3, 1)
+        params_layout.addWidget(QLabel("质量"), 4, 0)
+        params_layout.addWidget(self.t2i_quality, 4, 1)
+        params_layout.addWidget(self.t2i_execute, 5, 1)
+        params_layout.addWidget(self.t2i_postprocess, 6, 1)
+        params_layout.setColumnStretch(1, 1)
+        layout.addWidget(params)
+
+        api = QGroupBox("API 设置")
+        api_layout = QGridLayout(api)
+        self.t2i_base_url = QLineEdit()
+        self.t2i_base_url.setPlaceholderText("可选：OpenAI-compatible base URL")
+        self.t2i_api_key = QLineEdit()
+        self.t2i_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.t2i_api_key.setPlaceholderText("可选：仅本次进程使用，不写入文件")
+        api_layout.addWidget(QLabel("Base URL"), 0, 0)
+        api_layout.addWidget(self.t2i_base_url, 0, 1)
+        api_layout.addWidget(QLabel("API Key"), 1, 0)
+        api_layout.addWidget(self.t2i_api_key, 1, 1)
+        api_layout.setColumnStretch(1, 1)
+        layout.addWidget(api)
+        layout.addStretch(1)
+        return page
 
     def _make_batch_page(self) -> QWidget:
         page = QWidget()
@@ -789,6 +860,15 @@ class DashDesignQtApp(QMainWindow):
                 font-family: Menlo, Monaco, Consolas, monospace;
                 font-size: 12px;
             }
+            QPlainTextEdit#TextPrompt {
+                background: #ffffff;
+                color: #222222;
+                border: 1px solid #d9d9d9;
+                border-radius: 8px;
+                padding: 10px;
+                font-family: Menlo, Monaco, Consolas, monospace;
+                font-size: 12px;
+            }
             QWidget#PreviewPanel {
                 background: #ffffff;
                 border: 1px solid #d9d9d9;
@@ -803,6 +883,7 @@ class DashDesignQtApp(QMainWindow):
         self.stack.setCurrentIndex(row)
         titles = [
             ("项目基线", "查看当前 C 端海报生成基线，后续文生图会自动引用。"),
+            ("文生图", "基于当前项目基线生成 C 端海报背景，并可输出印刷尺寸。"),
             ("批量印刷", "将根目录或指定目录中的图片输出为印刷规格。"),
             ("GPT 重建", "从源图生成 GPT Image 请求包，必要时直接调用 API。"),
             ("去二维码留空", "只清除指定二维码区域，后期手动添加二维码。"),
@@ -880,10 +961,58 @@ class DashDesignQtApp(QMainWindow):
         if row == 0:
             raise ValueError("项目基线页面是只读预览，暂无可运行工作流。")
         if row == 1:
-            return self.build_batch_command()
+            return self.build_text_image_command()
         if row == 2:
+            return self.build_batch_command()
+        if row == 3:
             return self.build_gpt_command()
         return self.build_qr_command()
+
+    def build_text_image_command(self) -> tuple[list[str], Path, dict[str, str]]:
+        output_dir = Path(self.t2i_output.text()).expanduser()
+        prompt = self.t2i_prompt.toPlainText().strip()
+        if not prompt:
+            raise ValueError("请填写文生图提示词")
+        try:
+            width_cm = float(self.t2i_width_cm.text().strip())
+            height_cm = float(self.t2i_height_cm.text().strip())
+            dpi = int(self.t2i_dpi.text().strip())
+        except ValueError as exc:
+            raise ValueError("宽、高和 DPI 必须是数字") from exc
+        if width_cm <= 0 or height_cm <= 0 or dpi <= 0:
+            raise ValueError("宽、高和 DPI 必须大于 0")
+
+        command = [
+            *worker_prefix(),
+            "text-image",
+            "--baseline",
+            str(baseline_path()),
+            "--output-dir",
+            str(output_dir),
+            "--width-cm",
+            str(width_cm),
+            "--height-cm",
+            str(height_cm),
+            "--dpi",
+            str(dpi),
+            "--prompt",
+            prompt,
+            "--image-size",
+            self.t2i_image_size.currentText(),
+            "--quality",
+            self.t2i_quality.currentText(),
+        ]
+        if self.t2i_execute.isChecked():
+            command.append("--execute")
+        if self.t2i_postprocess.isChecked():
+            command.append("--postprocess-print")
+
+        env: dict[str, str] = {}
+        if self.t2i_base_url.text().strip():
+            env["OPENAI_BASE_URL"] = self.t2i_base_url.text().strip()
+        if self.t2i_api_key.text().strip():
+            env["OPENAI_API_KEY"] = self.t2i_api_key.text().strip()
+        return command, output_dir, env
 
     def build_batch_command(self) -> tuple[list[str], Path, dict[str, str]]:
         input_dir = Path(self.batch_input.text()).expanduser()
@@ -991,16 +1120,16 @@ class DashDesignQtApp(QMainWindow):
 
     def current_input_preview_path(self) -> Path | None:
         row = self.nav.currentRow()
-        if row == 0:
+        if row in (0, 1):
             return None
-        if row == 1:
+        if row == 2:
             input_dir = Path(self.batch_input.text()).expanduser()
             only = self.batch_only.text().strip()
             if only:
                 path = input_dir / only
                 return path if path.exists() else None
             return first_image(input_dir)
-        if row == 2:
+        if row == 3:
             path = Path(self.gpt_source.text()).expanduser()
             return path if path.exists() else None
         path = Path(self.qr_input.text()).expanduser()
@@ -1030,19 +1159,19 @@ class DashDesignQtApp(QMainWindow):
         path = Path(raw_path)
         if path.is_dir():
             self.batch_input.setText(str(path))
-            self.nav.setCurrentRow(1)
+            self.nav.setCurrentRow(2)
             self.preview_input()
             return
         if path.suffix.lower() not in IMAGE_EXTENSIONS:
             return
-        if self.nav.currentRow() == 2:
+        if self.nav.currentRow() == 3:
             self.gpt_source.setText(str(path))
-        elif self.nav.currentRow() == 3:
+        elif self.nav.currentRow() == 4:
             self.qr_input.setText(str(path))
         else:
             self.batch_input.setText(str(path.parent))
             self.batch_only.setText(path.name)
-            self.nav.setCurrentRow(1)
+            self.nav.setCurrentRow(2)
         self.load_preview(path)
 
     def open_last_output(self) -> None:
@@ -1129,7 +1258,7 @@ class DashDesignQtApp(QMainWindow):
             self,
             "关于 DashDesign",
             f"DashDesign 印刷图片工作流\n版本 {APP_VERSION}\n\n"
-            "PySide6/Qt 客户端原型，用于批量印刷输出、GPT 重建请求包和二维码区域清除。",
+            "PySide6/Qt 客户端原型，用于基线文生图、批量印刷输出、GPT 重建请求包和二维码区域清除。",
         )
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
@@ -1165,13 +1294,26 @@ def first_output_image(directory: Path) -> Path | None:
     if direct is not None:
         return direct
     review_dir = directory / "review"
-    return first_image(review_dir)
+    review_image = first_image(review_dir)
+    if review_image is not None:
+        return review_image
+    if not directory.exists() or not directory.is_dir():
+        return None
+    candidates = [
+        path
+        for path in directory.rglob("*")
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
 def run_script_worker(script_name: str, args: list[str]) -> int:
     script_map = {
         "batch-style": runtime_root() / "scripts" / "batch_style_preserved_print.py",
         "batch-pil": runtime_root() / "scripts" / "prepare_print_assets.py",
+        "text-image": runtime_root() / "scripts" / "text_to_image_print.py",
         "gpt": runtime_root() / "scripts" / "gpt_image_rebuild.py",
         "qr": runtime_root() / "scripts" / "remove_qr_area.py",
     }

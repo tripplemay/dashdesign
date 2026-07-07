@@ -55,6 +55,13 @@ jobs:
           assert "batch-style" in cmd, cmd
           assert output_dir.name == "print_ready_desktop_qt"
           assert env == {}
+          window.nav.setCurrentRow(1)
+          window.t2i_prompt.setPlainText("明亮未来教室，孩子进行 AI 数字艺术创作。")
+          cmd, output_dir, env = window.build_current_command()
+          assert "text-image" in cmd, cmd
+          assert "--baseline" in cmd, cmd
+          assert output_dir.name == "text_to_image_print_qt"
+          assert env == {}
           QTimer.singleShot(100, app.quit)
           app.exec()
           print("desktop wiring ok")

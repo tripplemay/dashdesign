@@ -13,9 +13,7 @@ directly with ``requests`` and saves the generated master.
 from __future__ import annotations
 
 import argparse
-import base64
 import json
-import os
 import re
 import stat
 import textwrap
@@ -23,9 +21,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-import requests
 from PIL import Image, ImageOps
 
+from image_api_client import execute_image_request
 from prepare_print_assets import parse_size_from_name, target_pixels
 
 
@@ -295,117 +293,6 @@ def write_curl_script(
     )
     path.write_text(script, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
-
-
-def execute_generation(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return {
-            "status": "skipped",
-            "reason": "OPENAI_API_KEY is not set",
-        }
-
-    base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    response = requests.post(
-        f"{base_url}/images/generations",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=900,
-    )
-    if response.status_code >= 400:
-        return {
-            "status": "error",
-            "status_code": response.status_code,
-            "body": response.text[:2000],
-        }
-
-    data = response.json()
-    first_image = data["data"][0]
-    if first_image.get("b64_json"):
-        output_path.write_bytes(base64.b64decode(first_image["b64_json"]))
-    elif first_image.get("url"):
-        image_response = requests.get(first_image["url"], timeout=900)
-        image_response.raise_for_status()
-        output_path.write_bytes(image_response.content)
-    else:
-        return {
-            "status": "error",
-            "reason": "Image response did not include b64_json or url",
-            "body": json.dumps(data, ensure_ascii=False)[:2000],
-        }
-    return {
-        "status": "generated",
-        "output": str(output_path),
-    }
-
-
-def _write_api_image_response(data: dict[str, Any], output_path: Path) -> dict[str, Any]:
-    first_image = data["data"][0]
-    if first_image.get("b64_json"):
-        output_path.write_bytes(base64.b64decode(first_image["b64_json"]))
-    elif first_image.get("url"):
-        image_response = requests.get(first_image["url"], timeout=900)
-        image_response.raise_for_status()
-        output_path.write_bytes(image_response.content)
-    else:
-        return {
-            "status": "error",
-            "reason": "Image response did not include b64_json or url",
-            "body": json.dumps(data, ensure_ascii=False)[:2000],
-        }
-
-    with Image.open(output_path) as image:
-        width, height = image.size
-    return {
-        "status": "generated",
-        "output": str(output_path),
-        "actual_px": f"{width}x{height}",
-    }
-
-
-def execute_image_request(
-    source: Path,
-    payload: dict[str, Any],
-    output_path: Path,
-    api_mode: str,
-) -> dict[str, Any]:
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return {
-            "status": "skipped",
-            "reason": "OPENAI_API_KEY is not set",
-        }
-
-    base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    headers = {"Authorization": f"Bearer {api_key}"}
-    if api_mode == "edit":
-        with source.open("rb") as image_file:
-            response = requests.post(
-                f"{base_url}/images/edits",
-                headers=headers,
-                data=payload,
-                files={"image": image_file},
-                timeout=900,
-            )
-    else:
-        response = requests.post(
-            f"{base_url}/images/generations",
-            headers={**headers, "Content-Type": "application/json"},
-            json=payload,
-            timeout=900,
-        )
-
-    if response.status_code >= 400:
-        return {
-            "status": "error",
-            "status_code": response.status_code,
-            "body": response.text[:2000],
-        }
-
-    return _write_api_image_response(response.json(), output_path)
 
 
 def build_package(
