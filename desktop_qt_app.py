@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSizePolicy,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
     QStyleFactory,
@@ -531,8 +532,17 @@ class DashDesignQtApp(QMainWindow):
 
     def _make_text_image_page(self) -> QWidget:
         page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 8, 0)
         layout.setSpacing(12)
 
         paths = QGroupBox("基线与输出")
@@ -542,7 +552,10 @@ class DashDesignQtApp(QMainWindow):
             str(PROJECT_ROOT / "workflow_samples" / "text_to_image_print_qt"),
             "dir",
         )
-        path_layout.addWidget(QLabel(f"基线文件：{baseline_path()}"))
+        baseline_label = QLabel(f"基线文件：{baseline_path()}")
+        baseline_label.setWordWrap(True)
+        baseline_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        path_layout.addWidget(baseline_label)
         path_layout.addWidget(self.t2i_output)
         layout.addWidget(paths)
 
@@ -556,30 +569,52 @@ class DashDesignQtApp(QMainWindow):
         layout.addWidget(prompt_box)
 
         params = QGroupBox("生成与印刷参数")
-        params_layout = QGridLayout(params)
+        params_layout = QVBoxLayout(params)
+        params_layout.setSpacing(10)
         self.t2i_width_cm = QLineEdit("120")
         self.t2i_height_cm = QLineEdit("80")
         self.t2i_dpi = QLineEdit("200")
+        for field in (self.t2i_width_cm, self.t2i_height_cm, self.t2i_dpi):
+            field.setFixedWidth(76)
         self.t2i_image_size = QComboBox()
         self.t2i_image_size.addItems(["auto", "1536x1024", "1024x1536", "1024x1024"])
+        self.t2i_image_size.setMinimumWidth(130)
         self.t2i_quality = QComboBox()
         self.t2i_quality.addItems(["high", "medium", "low", "auto"])
+        self.t2i_quality.setMinimumWidth(110)
         self.t2i_execute = QCheckBox("立即调用 API")
         self.t2i_postprocess = QCheckBox("生成后输出印刷尺寸")
         self.t2i_postprocess.setChecked(True)
-        params_layout.addWidget(QLabel("宽 cm"), 0, 0)
-        params_layout.addWidget(self.t2i_width_cm, 0, 1)
-        params_layout.addWidget(QLabel("高 cm"), 1, 0)
-        params_layout.addWidget(self.t2i_height_cm, 1, 1)
-        params_layout.addWidget(QLabel("DPI"), 2, 0)
-        params_layout.addWidget(self.t2i_dpi, 2, 1)
-        params_layout.addWidget(QLabel("模型尺寸"), 3, 0)
-        params_layout.addWidget(self.t2i_image_size, 3, 1)
-        params_layout.addWidget(QLabel("质量"), 4, 0)
-        params_layout.addWidget(self.t2i_quality, 4, 1)
-        params_layout.addWidget(self.t2i_execute, 5, 1)
-        params_layout.addWidget(self.t2i_postprocess, 6, 1)
-        params_layout.setColumnStretch(1, 1)
+
+        size_row = QHBoxLayout()
+        size_row.setSpacing(8)
+        size_row.addWidget(QLabel("宽 cm"))
+        size_row.addWidget(self.t2i_width_cm)
+        size_row.addSpacing(12)
+        size_row.addWidget(QLabel("高 cm"))
+        size_row.addWidget(self.t2i_height_cm)
+        size_row.addSpacing(12)
+        size_row.addWidget(QLabel("DPI"))
+        size_row.addWidget(self.t2i_dpi)
+        size_row.addStretch(1)
+        params_layout.addLayout(size_row)
+
+        model_row = QHBoxLayout()
+        model_row.setSpacing(8)
+        model_row.addWidget(QLabel("模型尺寸"))
+        model_row.addWidget(self.t2i_image_size)
+        model_row.addSpacing(12)
+        model_row.addWidget(QLabel("质量"))
+        model_row.addWidget(self.t2i_quality)
+        model_row.addStretch(1)
+        params_layout.addLayout(model_row)
+
+        option_row = QHBoxLayout()
+        option_row.setSpacing(18)
+        option_row.addWidget(self.t2i_execute)
+        option_row.addWidget(self.t2i_postprocess)
+        option_row.addStretch(1)
+        params_layout.addLayout(option_row)
         layout.addWidget(params)
 
         api = QGroupBox("API 设置")
@@ -596,6 +631,8 @@ class DashDesignQtApp(QMainWindow):
         api_layout.setColumnStretch(1, 1)
         layout.addWidget(api)
         layout.addStretch(1)
+        scroll.setWidget(content)
+        page_layout.addWidget(scroll)
         return page
 
     def _make_batch_page(self) -> QWidget:
@@ -842,6 +879,11 @@ class DashDesignQtApp(QMainWindow):
             }
             QLineEdit, QComboBox {
                 min-height: 26px;
+                border: 1px solid #d9d9d9;
+                border-radius: 6px;
+                padding: 3px 8px;
+                background: #ffffff;
+                color: #222222;
             }
             QPlainTextEdit {
                 background: #111111;
