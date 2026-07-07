@@ -586,6 +586,10 @@ class DashDesignQtApp(QMainWindow):
         self.t2i_mode.addItem("无文字背景", "background")
         self.t2i_mode.addItem("带文字海报", "poster")
         self.t2i_mode.currentIndexChanged.connect(self.sync_text_image_mode)
+        self.t2i_text_style = QComboBox()
+        self.t2i_text_style.addItem("清爽教育", "clean_edu")
+        self.t2i_text_style.addItem("科技霓虹", "tech_neon")
+        self.t2i_text_style.setMinimumWidth(130)
         self.t2i_width_cm = QLineEdit("120")
         self.t2i_height_cm = QLineEdit("80")
         self.t2i_dpi = QLineEdit("200")
@@ -605,6 +609,9 @@ class DashDesignQtApp(QMainWindow):
         mode_row.setSpacing(8)
         mode_row.addWidget(QLabel("输出类型"))
         mode_row.addWidget(self.t2i_mode)
+        mode_row.addSpacing(12)
+        mode_row.addWidget(QLabel("文字风格"))
+        mode_row.addWidget(self.t2i_text_style)
         mode_row.addStretch(1)
         params_layout.addLayout(mode_row)
 
@@ -663,6 +670,8 @@ class DashDesignQtApp(QMainWindow):
             return
         poster_mode = self.t2i_mode.currentData() == "poster"
         self.t2i_copy_box.setEnabled(poster_mode)
+        if hasattr(self, "t2i_text_style"):
+            self.t2i_text_style.setEnabled(poster_mode)
 
     def _make_batch_page(self) -> QWidget:
         page = QWidget()
@@ -1074,6 +1083,8 @@ class DashDesignQtApp(QMainWindow):
             prompt,
             "--mode",
             mode,
+            "--text-style",
+            str(self.t2i_text_style.currentData() or "clean_edu"),
             "--image-size",
             self.t2i_image_size.currentText(),
             "--quality",

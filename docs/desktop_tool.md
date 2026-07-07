@@ -53,6 +53,13 @@ Two output types are available:
   then DashDesign composes the supplied Chinese poster copy locally. This avoids
   model-made Chinese typos and keeps print text deterministic.
 
+Poster with copy also has a local text style selector:
+
+- Clean education: clearer enrollment poster typography, white panels, and
+  high readability.
+- Tech neon: glowing AI-style headline, neon module cards, and a stronger
+  promotional visual tone.
+
 If `Execute API` is not checked, the tool creates an offline package containing
 the final prompt, baseline context, request JSON, and generation record. If
 checked, `OPENAI_API_KEY` is passed only as an environment variable for that
@@ -63,7 +70,9 @@ DPI.
 Keep the visual prompt and poster copy separate. The visual prompt should
 describe scene, subject, mood, layout, and safe areas. The poster copy field can
 accept pasted text such as `主标题：...`, `副标题：...`, `课程类型：...`,
-and `结语：...`.
+and `结语：...`. The tool writes copy warnings into the output package when it
+detects suspicious typos or when a QR code is only drawn as a non-scannable
+placeholder.
 
 ### 3. Batch Print
 

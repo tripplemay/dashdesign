@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from image_api_client import execute_image_generation
 from prepare_print_assets import (
@@ -27,13 +27,44 @@ from prepare_print_assets import (
 )
 
 
-PROMPT_TEMPLATE_VERSION = "text_to_image_print.v2"
+PROMPT_TEMPLATE_VERSION = "text_to_image_print.v3"
 DEFAULT_BASELINE = Path("docs") / "baseline" / "baseline.v1.draft.json"
 DEFAULT_OUTPUT_DIR = Path("workflow_samples") / "text_to_image_print"
 IMAGE_SIZE_RE = re.compile(r"^\d+x\d+$")
 MODE_BACKGROUND = "background"
 MODE_POSTER = "poster"
 MODE_CHOICES = (MODE_BACKGROUND, MODE_POSTER)
+TEXT_STYLE_CLEAN_EDU = "clean_edu"
+TEXT_STYLE_TECH_NEON = "tech_neon"
+TEXT_STYLE_CHOICES = (TEXT_STYLE_CLEAN_EDU, TEXT_STYLE_TECH_NEON)
+TEXT_STYLE_NAMES = {
+    TEXT_STYLE_CLEAN_EDU: "clean readable education poster typography",
+    TEXT_STYLE_TECH_NEON: "AI tech neon poster typography",
+}
+PROTECTED_CJK_PHRASES = (
+    "AI课程",
+    "AI绘图",
+    "AI视频",
+    "AI漫剧",
+    "AI编程",
+    "小程序",
+    "孩子",
+    "学习",
+    "未来",
+    "课程",
+    "免费",
+    "预约",
+    "福利",
+    "绘图",
+    "编程",
+    "网页",
+    "创意",
+)
+TEXT_TOKEN_RE = re.compile(
+    "|".join(re.escape(item) for item in PROTECTED_CJK_PHRASES)
+    + r"|[A-Za-z0-9][A-Za-z0-9_+\-./#&%]*|[\u4e00-\u9fff]|[^\s]"
+)
+NO_BREAK_BEFORE = set("，。！？；：、,.!?;:)]}）》」』”’")
 FONT_CANDIDATES = [
     Path("/System/Library/Fonts/PingFang.ttc"),
     Path("/System/Library/Fonts/STHeiti Medium.ttc"),
@@ -45,6 +76,16 @@ FONT_CANDIDATES = [
     Path("C:/Windows/Fonts/simhei.ttf"),
     Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
     Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+]
+SUSPICIOUS_COPY_PATTERNS = [
+    (
+        re.compile(r"(?<![A-Za-z])Al(?=[\u4e00-\u9fff])"),
+        "疑似把英文大写 AI 写成了 Al，请确认海报文案。",
+    ),
+    (
+        re.compile(r"画画作|故事动活|免得AI"),
+        "检测到疑似错别字，请在输出前复核海报文案。",
+    ),
 ]
 
 
@@ -250,6 +291,10 @@ def text_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, s
     return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
 
+def text_tokens(text: str) -> list[str]:
+    return TEXT_TOKEN_RE.findall(text)
+
+
 def wrap_text(
     draw: ImageDraw.ImageDraw,
     text: str,
@@ -261,12 +306,27 @@ def wrap_text(
     lines: list[str] = []
     for paragraph in paragraphs:
         current = ""
-        for char in paragraph:
-            candidate = current + char
+        for token in text_tokens(paragraph):
+            candidate = current + token
             width, _ = text_size(draw, candidate, font, stroke_width)
             if current and width > max_width:
+                if token in NO_BREAK_BEFORE:
+                    current = candidate
+                    continue
                 lines.append(current)
-                current = char
+                token_width, _ = text_size(draw, token, font, stroke_width)
+                if token_width <= max_width:
+                    current = token
+                else:
+                    current = ""
+                    for char in token:
+                        char_candidate = current + char
+                        char_width, _ = text_size(draw, char_candidate, font, stroke_width)
+                        if current and char_width > max_width:
+                            lines.append(current)
+                            current = char
+                        else:
+                            current = char_candidate
             else:
                 current = candidate
         if current:
@@ -311,11 +371,20 @@ def draw_text_block(
     spacing: int,
     stroke_fill: tuple[int, int, int] | None = None,
     stroke_width: int = 0,
+    align: str = "left",
+    max_width: int | None = None,
 ) -> int:
     x, y = xy
     for line in lines:
+        line_x = x
+        if max_width is not None and align != "left":
+            line_width, _ = text_size(draw, line, font, stroke_width)
+            if align == "center":
+                line_x = x + max(0, max_width - line_width) // 2
+            elif align == "right":
+                line_x = x + max(0, max_width - line_width)
         draw.text(
-            (x, y),
+            (line_x, y),
             line,
             font=font,
             fill=fill,
@@ -348,73 +417,200 @@ def draw_centered_text(
     )
 
 
-def compose_poster_copy(
-    background_path: Path,
-    output_path: Path,
-    poster_copy: PosterCopy,
-    dpi: int,
-) -> dict[str, Any]:
-    with Image.open(background_path) as raw:
-        image = ImageOps.exif_transpose(raw).convert("RGBA")
-        icc_profile = raw.info.get("icc_profile")
+def text_block_size(
+    draw: ImageDraw.ImageDraw,
+    lines: list[str],
+    font: ImageFont.ImageFont,
+    spacing: int,
+    stroke_width: int = 0,
+) -> tuple[int, int]:
+    line_sizes = [text_size(draw, line or "国", font, stroke_width) for line in lines]
+    width = max((item[0] for item in line_sizes), default=0)
+    height = sum(item[1] for item in line_sizes) + max(0, len(line_sizes) - 1) * spacing
+    return width, height
 
+
+def split_module_copy(module: str) -> tuple[str, str]:
+    if "：" in module:
+        title, body = module.split("：", 1)
+    elif ":" in module:
+        title, body = module.split(":", 1)
+    else:
+        title, body = module, ""
+    return title.strip(), body.strip()
+
+
+def has_qr_request(poster_copy: PosterCopy) -> bool:
+    return "扫码" in poster_copy.raw_text or "二维码" in poster_copy.raw_text
+
+
+def analyze_poster_copy(poster_copy: PosterCopy) -> list[dict[str, str]]:
+    warnings: list[dict[str, str]] = []
+    text = "\n".join(
+        [
+            poster_copy.raw_text,
+            poster_copy.headline,
+            poster_copy.subtitle,
+            "\n".join(poster_copy.normalized_modules()),
+            poster_copy.cta,
+        ]
+    )
+    for pattern, message in SUSPICIOUS_COPY_PATTERNS:
+        if pattern.search(text):
+            warnings.append({"type": "copy_suspicion", "message": message})
+    if has_qr_request(poster_copy):
+        warnings.append(
+            {
+                "type": "qr_placeholder",
+                "message": "本地合成只绘制二维码占位框，不生成可扫描二维码。",
+            }
+        )
+    return warnings
+
+
+def draw_glow_text_block(
+    image: Image.Image,
+    xy: tuple[int, int],
+    lines: list[str],
+    font: ImageFont.ImageFont,
+    fill: tuple[int, int, int],
+    spacing: int,
+    glow_fill: tuple[int, int, int],
+    glow_radius: int,
+    stroke_fill: tuple[int, int, int] | None = None,
+    stroke_width: int = 0,
+    align: str = "left",
+    max_width: int | None = None,
+) -> int:
+    glow_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow_layer)
+    draw_text_block(
+        glow_draw,
+        xy,
+        lines,
+        font,
+        (*glow_fill, 220),
+        spacing,
+        stroke_fill=(*glow_fill, 220),
+        stroke_width=max(stroke_width + 2, 2),
+        align=align,
+        max_width=max_width,
+    )
+    image.alpha_composite(glow_layer.filter(ImageFilter.GaussianBlur(glow_radius)))
+    draw = ImageDraw.Draw(image)
+    return draw_text_block(
+        draw,
+        xy,
+        lines,
+        font,
+        fill,
+        spacing,
+        stroke_fill=stroke_fill,
+        stroke_width=stroke_width,
+        align=align,
+        max_width=max_width,
+    )
+
+
+def draw_glow_rectangle(
+    overlay: Image.Image,
+    box: tuple[int, int, int, int],
+    radius: int,
+    outline: tuple[int, int, int],
+    width: int,
+    blur: int,
+) -> None:
+    glow_layer = Image.new("RGBA", overlay.size, (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow_layer)
+    glow_draw.rounded_rectangle(
+        box,
+        radius=radius,
+        outline=(*outline, 190),
+        width=max(width * 2, width + 1),
+    )
+    overlay.alpha_composite(glow_layer.filter(ImageFilter.GaussianBlur(blur)))
+
+
+def compose_clean_edu_layout(
+    image: Image.Image,
+    overlay: Image.Image,
+    poster_copy: PosterCopy,
+    font_path: Path | None,
+) -> dict[str, Any]:
     width, height = image.size
     landscape = width >= height
-    font_path = find_font_path()
-    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw_image = ImageDraw.Draw(image)
     draw_overlay = ImageDraw.Draw(overlay)
-    draw_base = ImageDraw.Draw(image)
-    margin = int(width * 0.055)
-    title_color = (20, 29, 56)
-    body_color = (30, 38, 68)
+    margin = int(width * (0.055 if landscape else 0.06))
     white = (255, 255, 255)
-    panel_fill = (255, 255, 255, 205)
-    dark_panel = (18, 28, 58, 230)
+    ink = (20, 29, 56)
+    body = (36, 45, 72)
+    accent = (0, 147, 178)
+    warm_accent = (255, 179, 72)
 
-    title_max_w = int(width * (0.78 if landscape else 0.86))
-    title_max_h = int(height * (0.18 if landscape else 0.15))
-    title_start = int(height * (0.086 if landscape else 0.052))
+    title_max_w = int(width * (0.82 if landscape else 0.86))
+    title_x = (width - title_max_w) // 2
+    title_y = int(height * (0.055 if landscape else 0.045))
     title_font, title_lines, title_spacing = fit_text_block(
-        draw_base,
+        draw_image,
         poster_copy.headline,
         font_path,
-        int(height * (0.075 if landscape else 0.045)),
-        max(22, int(height * 0.025)),
+        int(height * (0.072 if landscape else 0.047)),
+        max(24, int(height * 0.023)),
         title_max_w,
-        title_max_h,
-        stroke_width=max(2, int(height * 0.003)),
+        int(height * (0.16 if landscape else 0.13)),
+        stroke_width=max(2, int(height * 0.0025)),
     )
-    cursor_y = draw_text_block(
-        draw_base,
-        (margin, title_start),
+    shadow_offset = max(2, int(height * 0.004))
+    draw_text_block(
+        draw_overlay,
+        (title_x + shadow_offset, title_y + shadow_offset),
         title_lines,
         title_font,
-        title_color,
+        (255, 255, 255, 150),
+        title_spacing,
+        stroke_fill=(255, 255, 255, 150),
+        stroke_width=max(2, int(height * 0.003)),
+        align="center",
+        max_width=title_max_w,
+    )
+    cursor_y = draw_text_block(
+        draw_overlay,
+        (title_x, title_y),
+        title_lines,
+        title_font,
+        ink,
         title_spacing,
         stroke_fill=white,
-        stroke_width=max(2, int(height * 0.003)),
+        stroke_width=max(2, int(height * 0.0025)),
+        align="center",
+        max_width=title_max_w,
     )
 
     if poster_copy.subtitle:
+        subtitle_max_w = int(width * (0.72 if landscape else 0.84))
+        subtitle_x = (width - subtitle_max_w) // 2
         subtitle_font, subtitle_lines, subtitle_spacing = fit_text_block(
-            draw_base,
+            draw_overlay,
             poster_copy.subtitle,
             font_path,
-            int(height * (0.031 if landscape else 0.022)),
+            int(height * (0.029 if landscape else 0.021)),
             max(16, int(height * 0.014)),
-            int(width * (0.72 if landscape else 0.84)),
-            int(height * 0.11),
-            stroke_width=max(1, int(height * 0.0015)),
+            subtitle_max_w,
+            int(height * 0.095),
+            stroke_width=max(1, int(height * 0.0012)),
         )
         draw_text_block(
-            draw_base,
-            (margin, cursor_y + int(height * 0.025)),
+            draw_overlay,
+            (subtitle_x, cursor_y + int(height * 0.018)),
             subtitle_lines,
             subtitle_font,
-            body_color,
+            body,
             subtitle_spacing,
             stroke_fill=white,
-            stroke_width=max(1, int(height * 0.0015)),
+            stroke_width=max(1, int(height * 0.0012)),
+            align="center",
+            max_width=subtitle_max_w,
         )
 
     modules = poster_copy.normalized_modules()
@@ -423,11 +619,13 @@ def compose_poster_copy(
         cols = min(4, len(modules)) if landscape else min(2, len(modules))
         rows = (len(modules) + cols - 1) // cols
         grid_x = margin
-        grid_y = int(height * (0.56 if landscape else 0.58))
         grid_w = width - margin * 2
         card_w = (grid_w - gap * (cols - 1)) // cols
-        card_h = int(height * (0.15 if landscape else 0.12))
-        card_font_size = int(height * (0.025 if landscape else 0.018))
+        card_h = int(height * (0.155 if landscape else 0.118))
+        total_h = rows * card_h + max(0, rows - 1) * gap
+        grid_y = int(height * (0.54 if landscape else 0.57))
+        if grid_y + total_h > int(height * 0.84):
+            grid_y = max(int(height * 0.45), int(height * 0.84) - total_h)
         for index, module in enumerate(modules[: cols * rows]):
             col = index % cols
             row = index // cols
@@ -435,79 +633,386 @@ def compose_poster_copy(
             y1 = grid_y + row * (card_h + gap)
             x2 = x1 + card_w
             y2 = y1 + card_h
+            radius = max(10, int(height * 0.014))
+            draw_overlay.rounded_rectangle(
+                (x1 + 5, y1 + 6, x2 + 5, y2 + 6),
+                radius=radius,
+                fill=(14, 24, 48, 48),
+            )
             draw_overlay.rounded_rectangle(
                 (x1, y1, x2, y2),
-                radius=max(12, int(height * 0.018)),
-                fill=panel_fill,
-                outline=(130, 183, 255, 210),
+                radius=radius,
+                fill=(255, 255, 255, 218),
+                outline=(108, 191, 206, 220),
                 width=max(2, int(height * 0.002)),
             )
-            font, lines, spacing = fit_text_block(
+            draw_overlay.rounded_rectangle(
+                (x1, y1, x2, y1 + max(5, int(card_h * 0.055))),
+                radius=radius,
+                fill=(*accent, 235),
+            )
+            title, detail = split_module_copy(module)
+            inner_x = x1 + int(card_w * 0.08)
+            inner_w = card_w - int(card_w * 0.16)
+            module_title_font, module_title_lines, module_title_spacing = fit_text_block(
                 draw_overlay,
-                module,
+                title,
                 font_path,
-                card_font_size,
-                max(12, int(height * 0.012)),
-                card_w - int(card_w * 0.16),
-                card_h - int(card_h * 0.25),
-                stroke_width=0,
+                int(height * (0.027 if landscape else 0.019)),
+                max(13, int(height * 0.012)),
+                inner_w,
+                int(card_h * 0.35),
             )
-            line_height = text_size(draw_overlay, "国", font)[1]
-            total_height = len(lines) * line_height + max(0, len(lines) - 1) * spacing
-            draw_text_block(
+            module_y = y1 + int(card_h * 0.18)
+            module_y = draw_text_block(
                 draw_overlay,
-                (x1 + int(card_w * 0.08), y1 + (card_h - total_height) // 2),
-                lines,
-                font,
-                body_color,
-                spacing,
+                (inner_x, module_y),
+                module_title_lines,
+                module_title_font,
+                ink,
+                module_title_spacing,
             )
+            if detail:
+                detail_font, detail_lines, detail_spacing = fit_text_block(
+                    draw_overlay,
+                    detail,
+                    font_path,
+                    int(height * (0.019 if landscape else 0.014)),
+                    max(10, int(height * 0.009)),
+                    inner_w,
+                    max(1, y2 - module_y - int(card_h * 0.12)),
+                )
+                draw_text_block(
+                    draw_overlay,
+                    (inner_x, module_y + int(card_h * 0.08)),
+                    detail_lines,
+                    detail_font,
+                    body,
+                    detail_spacing,
+                )
 
     if poster_copy.cta:
-        cta_w = int(width * (0.62 if landscape else 0.78))
-        cta_h = int(height * (0.09 if landscape else 0.065))
-        cta_x1 = (width - cta_w) // 2
-        cta_y1 = int(height * (0.86 if landscape else 0.88))
-        cta_box = (cta_x1, cta_y1, cta_x1 + cta_w, cta_y1 + cta_h)
+        qr_needed = has_qr_request(poster_copy)
+        qr_size = int(height * (0.13 if landscape else 0.078)) if qr_needed else 0
+        gap = max(16, int(width * 0.018))
+        cta_h = int(height * (0.088 if landscape else 0.064))
+        cta_y1 = height - margin - cta_h
+        cta_x1 = margin
+        cta_x2 = width - margin - (qr_size + gap if qr_needed else 0)
+        if cta_x2 <= cta_x1:
+            cta_x2 = width - margin
+            qr_size = 0
+        cta_box = (cta_x1, cta_y1, cta_x2, cta_y1 + cta_h)
+        draw_overlay.rounded_rectangle(
+            (cta_box[0] + 5, cta_box[1] + 7, cta_box[2] + 5, cta_box[3] + 7),
+            radius=max(12, int(cta_h * 0.25)),
+            fill=(8, 18, 42, 72),
+        )
         draw_overlay.rounded_rectangle(
             cta_box,
-            radius=max(14, int(cta_h * 0.28)),
-            fill=dark_panel,
+            radius=max(12, int(cta_h * 0.25)),
+            fill=(13, 31, 62, 238),
+            outline=(*warm_accent, 230),
+            width=max(2, int(height * 0.002)),
         )
         cta_font, cta_lines, cta_spacing = fit_text_block(
             draw_overlay,
             poster_copy.cta,
             font_path,
-            int(cta_h * 0.36),
-            max(14, int(cta_h * 0.22)),
-            int(cta_w * 0.86),
+            int(cta_h * 0.38),
+            max(14, int(cta_h * 0.2)),
+            int((cta_x2 - cta_x1) * 0.86),
             int(cta_h * 0.72),
         )
-        line_height = text_size(draw_overlay, "国", cta_font)[1]
-        total_height = len(cta_lines) * line_height + max(0, len(cta_lines) - 1) * cta_spacing
+        _, cta_text_h = text_block_size(draw_overlay, cta_lines, cta_font, cta_spacing)
         draw_text_block(
             draw_overlay,
-            (cta_x1 + int(cta_w * 0.07), cta_y1 + (cta_h - total_height) // 2),
+            (cta_x1 + int((cta_x2 - cta_x1) * 0.07), cta_y1 + (cta_h - cta_text_h) // 2),
             cta_lines,
             cta_font,
             white,
             cta_spacing,
         )
 
-        if "扫码" in poster_copy.raw_text or "二维码" in poster_copy.raw_text:
-            qr_size = int(height * (0.14 if landscape else 0.08))
+        if qr_needed and qr_size > 0:
             qr_x2 = width - margin
-            qr_y2 = height - int(height * 0.06)
+            qr_y2 = cta_y1 + cta_h
             qr_box = (qr_x2 - qr_size, qr_y2 - qr_size, qr_x2, qr_y2)
             draw_overlay.rounded_rectangle(
                 qr_box,
                 radius=max(8, int(qr_size * 0.08)),
-                fill=(255, 255, 255, 230),
-                outline=(24, 38, 78, 210),
-                width=max(2, int(qr_size * 0.025)),
+                fill=(255, 255, 255, 238),
+                outline=(13, 31, 62, 220),
+                width=max(2, int(qr_size * 0.024)),
             )
-            qr_font = load_font(font_path, max(12, int(qr_size * 0.13)))
-            draw_centered_text(draw_overlay, qr_box, "二维码预留", qr_font, body_color)
+            qr_font = load_font(font_path, max(12, int(qr_size * 0.12)))
+            draw_centered_text(draw_overlay, qr_box, "二维码预留", qr_font, body)
+
+    return {"layout_template": TEXT_STYLE_CLEAN_EDU}
+
+
+def compose_tech_neon_layout(
+    image: Image.Image,
+    overlay: Image.Image,
+    poster_copy: PosterCopy,
+    font_path: Path | None,
+) -> dict[str, Any]:
+    width, height = image.size
+    landscape = width >= height
+    draw_image = ImageDraw.Draw(image)
+    draw_overlay = ImageDraw.Draw(overlay)
+    margin = int(width * (0.052 if landscape else 0.058))
+    cyan = (78, 230, 255)
+    magenta = (255, 84, 230)
+    purple = (130, 96, 255)
+    white = (255, 255, 255)
+    deep = (5, 12, 34)
+
+    title_max_w = int(width * (0.84 if landscape else 0.88))
+    title_x = (width - title_max_w) // 2
+    title_y = int(height * (0.05 if landscape else 0.042))
+    title_font, title_lines, title_spacing = fit_text_block(
+        draw_image,
+        poster_copy.headline,
+        font_path,
+        int(height * (0.08 if landscape else 0.05)),
+        max(24, int(height * 0.024)),
+        title_max_w,
+        int(height * (0.17 if landscape else 0.14)),
+        stroke_width=max(3, int(height * 0.003)),
+    )
+    cursor_y = draw_glow_text_block(
+        image,
+        (title_x, title_y),
+        title_lines,
+        title_font,
+        white,
+        title_spacing,
+        glow_fill=magenta,
+        glow_radius=max(5, int(height * 0.008)),
+        stroke_fill=cyan,
+        stroke_width=max(2, int(height * 0.003)),
+        align="center",
+        max_width=title_max_w,
+    )
+
+    if poster_copy.subtitle:
+        subtitle_max_w = int(width * (0.72 if landscape else 0.84))
+        subtitle_x = (width - subtitle_max_w) // 2
+        subtitle_font, subtitle_lines, subtitle_spacing = fit_text_block(
+            draw_overlay,
+            poster_copy.subtitle,
+            font_path,
+            int(height * (0.031 if landscape else 0.022)),
+            max(16, int(height * 0.014)),
+            subtitle_max_w,
+            int(height * 0.1),
+            stroke_width=max(2, int(height * 0.002)),
+        )
+        draw_glow_text_block(
+            overlay,
+            (subtitle_x, cursor_y + int(height * 0.02)),
+            subtitle_lines,
+            subtitle_font,
+            white,
+            subtitle_spacing,
+            glow_fill=cyan,
+            glow_radius=max(3, int(height * 0.004)),
+            stroke_fill=deep,
+            stroke_width=max(2, int(height * 0.002)),
+            align="center",
+            max_width=subtitle_max_w,
+        )
+
+    modules = poster_copy.normalized_modules()
+    if modules:
+        gap = max(14, int(width * 0.014))
+        cols = min(4, len(modules)) if landscape else min(2, len(modules))
+        rows = (len(modules) + cols - 1) // cols
+        grid_x = margin
+        grid_w = width - margin * 2
+        card_w = (grid_w - gap * (cols - 1)) // cols
+        card_h = int(height * (0.15 if landscape else 0.116))
+        total_h = rows * card_h + max(0, rows - 1) * gap
+        grid_y = int(height * (0.55 if landscape else 0.58))
+        if grid_y + total_h > int(height * 0.84):
+            grid_y = max(int(height * 0.46), int(height * 0.84) - total_h)
+        for index, module in enumerate(modules[: cols * rows]):
+            col = index % cols
+            row = index // cols
+            x1 = grid_x + col * (card_w + gap)
+            y1 = grid_y + row * (card_h + gap)
+            x2 = x1 + card_w
+            y2 = y1 + card_h
+            radius = max(10, int(height * 0.014))
+            draw_glow_rectangle(
+                overlay,
+                (x1, y1, x2, y2),
+                radius,
+                magenta if index % 2 else cyan,
+                max(2, int(height * 0.002)),
+                max(5, int(height * 0.006)),
+            )
+            draw_overlay.rounded_rectangle(
+                (x1, y1, x2, y2),
+                radius=radius,
+                fill=(6, 12, 38, 188),
+                outline=(*(magenta if index % 2 else cyan), 230),
+                width=max(2, int(height * 0.002)),
+            )
+            draw_overlay.line(
+                (x1 + int(card_w * 0.08), y1 + int(card_h * 0.18), x2 - int(card_w * 0.08), y1 + int(card_h * 0.18)),
+                fill=(*purple, 210),
+                width=max(2, int(height * 0.002)),
+            )
+            title, detail = split_module_copy(module)
+            inner_x = x1 + int(card_w * 0.08)
+            inner_w = card_w - int(card_w * 0.16)
+            module_title_font, module_title_lines, module_title_spacing = fit_text_block(
+                draw_overlay,
+                title,
+                font_path,
+                int(height * (0.026 if landscape else 0.019)),
+                max(13, int(height * 0.012)),
+                inner_w,
+                int(card_h * 0.34),
+                stroke_width=max(1, int(height * 0.001)),
+            )
+            module_y = y1 + int(card_h * 0.24)
+            module_y = draw_text_block(
+                draw_overlay,
+                (inner_x, module_y),
+                module_title_lines,
+                module_title_font,
+                white,
+                module_title_spacing,
+                stroke_fill=deep,
+                stroke_width=max(1, int(height * 0.001)),
+            )
+            if detail:
+                detail_font, detail_lines, detail_spacing = fit_text_block(
+                    draw_overlay,
+                    detail,
+                    font_path,
+                    int(height * (0.018 if landscape else 0.014)),
+                    max(10, int(height * 0.009)),
+                    inner_w,
+                    max(1, y2 - module_y - int(card_h * 0.12)),
+                    stroke_width=max(1, int(height * 0.001)),
+                )
+                draw_text_block(
+                    draw_overlay,
+                    (inner_x, module_y + int(card_h * 0.07)),
+                    detail_lines,
+                    detail_font,
+                    (226, 248, 255),
+                    detail_spacing,
+                    stroke_fill=deep,
+                    stroke_width=max(1, int(height * 0.001)),
+                )
+
+    if poster_copy.cta:
+        qr_needed = has_qr_request(poster_copy)
+        qr_size = int(height * (0.13 if landscape else 0.078)) if qr_needed else 0
+        gap = max(16, int(width * 0.018))
+        cta_h = int(height * (0.088 if landscape else 0.064))
+        cta_y1 = height - margin - cta_h
+        cta_x1 = margin
+        cta_x2 = width - margin - (qr_size + gap if qr_needed else 0)
+        if cta_x2 <= cta_x1:
+            cta_x2 = width - margin
+            qr_size = 0
+        cta_box = (cta_x1, cta_y1, cta_x2, cta_y1 + cta_h)
+        draw_glow_rectangle(
+            overlay,
+            cta_box,
+            max(12, int(cta_h * 0.25)),
+            magenta,
+            max(2, int(height * 0.002)),
+            max(6, int(height * 0.007)),
+        )
+        draw_overlay.rounded_rectangle(
+            cta_box,
+            radius=max(12, int(cta_h * 0.25)),
+            fill=(7, 12, 42, 225),
+            outline=(*magenta, 235),
+            width=max(2, int(height * 0.002)),
+        )
+        draw_overlay.line(
+            (cta_x1 + int(cta_h * 0.28), cta_y1 + cta_h - 2, cta_x2 - int(cta_h * 0.28), cta_y1 + cta_h - 2),
+            fill=(*cyan, 230),
+            width=max(2, int(height * 0.002)),
+        )
+        cta_font, cta_lines, cta_spacing = fit_text_block(
+            draw_overlay,
+            poster_copy.cta,
+            font_path,
+            int(cta_h * 0.4),
+            max(14, int(cta_h * 0.2)),
+            int((cta_x2 - cta_x1) * 0.86),
+            int(cta_h * 0.72),
+            stroke_width=max(1, int(height * 0.001)),
+        )
+        _, cta_text_h = text_block_size(draw_overlay, cta_lines, cta_font, cta_spacing, max(1, int(height * 0.001)))
+        draw_text_block(
+            draw_overlay,
+            (cta_x1 + int((cta_x2 - cta_x1) * 0.07), cta_y1 + (cta_h - cta_text_h) // 2),
+            cta_lines,
+            cta_font,
+            white,
+            cta_spacing,
+            stroke_fill=deep,
+            stroke_width=max(1, int(height * 0.001)),
+        )
+
+        if qr_needed and qr_size > 0:
+            qr_x2 = width - margin
+            qr_y2 = cta_y1 + cta_h
+            qr_box = (qr_x2 - qr_size, qr_y2 - qr_size, qr_x2, qr_y2)
+            draw_glow_rectangle(
+                overlay,
+                qr_box,
+                max(8, int(qr_size * 0.08)),
+                cyan,
+                max(2, int(qr_size * 0.024)),
+                max(4, int(qr_size * 0.05)),
+            )
+            draw_overlay.rounded_rectangle(
+                qr_box,
+                radius=max(8, int(qr_size * 0.08)),
+                fill=(255, 255, 255, 232),
+                outline=(*cyan, 230),
+                width=max(2, int(qr_size * 0.024)),
+            )
+            qr_font = load_font(font_path, max(12, int(qr_size * 0.12)))
+            draw_centered_text(draw_overlay, qr_box, "二维码预留", qr_font, deep)
+
+    return {"layout_template": TEXT_STYLE_TECH_NEON}
+
+
+def compose_poster_copy(
+    background_path: Path,
+    output_path: Path,
+    poster_copy: PosterCopy,
+    dpi: int,
+    text_style: str,
+) -> dict[str, Any]:
+    if text_style not in TEXT_STYLE_CHOICES:
+        raise ValueError(f"Text style must be one of: {', '.join(TEXT_STYLE_CHOICES)}")
+
+    with Image.open(background_path) as raw:
+        image = ImageOps.exif_transpose(raw).convert("RGBA")
+        icc_profile = raw.info.get("icc_profile")
+
+    width, height = image.size
+    font_path = find_font_path()
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+
+    modules = poster_copy.normalized_modules()
+    if text_style == TEXT_STYLE_TECH_NEON:
+        layout_result = compose_tech_neon_layout(image, overlay, poster_copy, font_path)
+    else:
+        layout_result = compose_clean_edu_layout(image, overlay, poster_copy, font_path)
 
     composed = Image.alpha_composite(image, overlay).convert("RGB")
     save_print_image(composed, output_path, dpi, icc_profile)
@@ -516,10 +1021,13 @@ def compose_poster_copy(
         "output": str(output_path),
         "output_px": f"{width}x{height}",
         "font": str(font_path) if font_path else "PIL default",
+        "text_style": text_style,
+        "text_style_name": TEXT_STYLE_NAMES[text_style],
         "headline": bool(poster_copy.headline),
         "subtitle": bool(poster_copy.subtitle),
         "modules": len(modules),
         "cta": bool(poster_copy.cta),
+        **layout_result,
     }
 
 
@@ -557,6 +1065,7 @@ def build_baseline_prompt_context(
     image_size: str,
     mode: str,
     poster_copy: PosterCopy,
+    text_style: str,
 ) -> str:
     project = baseline.get("project", {}) if isinstance(baseline, dict) else {}
     consumer = baseline.get("consumer_baseline", {}) if isinstance(baseline, dict) else {}
@@ -584,6 +1093,7 @@ def build_baseline_prompt_context(
             f"- Subtitle present: {'yes' if poster_copy.subtitle else 'no'}",
             f"- Course/module blocks: {len(poster_copy.normalized_modules())}",
             f"- Call-to-action present: {'yes' if poster_copy.cta else 'no'}",
+            f"- Local typography style: {TEXT_STYLE_NAMES.get(text_style, text_style)}",
             "Reserve clean, calm areas for these text layers. Do not render the copy inside the image model output.",
         ]
         text_policy = [
@@ -752,6 +1262,7 @@ def build_package(
     execute: bool,
     postprocess_print: bool,
     mode: str,
+    text_style: str,
     poster_copy_text: str,
     headline: str | None,
     subtitle: str | None,
@@ -761,6 +1272,8 @@ def build_package(
 ) -> Path:
     if mode not in MODE_CHOICES:
         raise ValueError(f"Mode must be one of: {', '.join(MODE_CHOICES)}")
+    if text_style not in TEXT_STYLE_CHOICES:
+        raise ValueError(f"Text style must be one of: {', '.join(TEXT_STYLE_CHOICES)}")
     if width_cm <= 0 or height_cm <= 0:
         raise ValueError("Width and height must be positive centimeters")
     if dpi <= 0:
@@ -770,6 +1283,7 @@ def build_package(
 
     baseline = load_baseline(baseline_path)
     poster_copy = parse_poster_copy(poster_copy_text, headline, subtitle, modules, cta)
+    copy_warnings = analyze_poster_copy(poster_copy) if mode == MODE_POSTER else []
     if mode == MODE_POSTER and not poster_copy.has_content():
         raise ValueError("Poster mode requires poster copy. Fill --poster-copy or structured copy fields.")
 
@@ -800,6 +1314,7 @@ def build_package(
         image_size,
         mode,
         poster_copy,
+        text_style,
     )
     payload = build_payload(model, prompt, image_size, quality, output_format)
 
@@ -821,6 +1336,7 @@ def build_package(
     write_json(package_dir / "image_generation_request.json", payload)
     if mode == MODE_POSTER:
         write_json(package_dir / "poster_copy.json", asdict(poster_copy))
+        write_json(package_dir / "poster_copy_warnings.json", copy_warnings)
     write_json(
         package_dir / "print_spec.json",
         {
@@ -831,6 +1347,7 @@ def build_package(
             "image_api_master_size": image_size,
             "output_format": output_format,
             "mode": mode,
+            "text_style": text_style if mode == MODE_POSTER else None,
         },
     )
     write_json(
@@ -842,6 +1359,7 @@ def build_package(
             "profile_hash": context_hash,
             "prompt_template_version": PROMPT_TEMPLATE_VERSION,
             "mode": mode,
+            "text_style": text_style if mode == MODE_POSTER else None,
             "model": model,
             "size": image_size,
             "quality": quality,
@@ -859,6 +1377,7 @@ def build_package(
         "poster_master": {"status": "not_requested" if mode == MODE_BACKGROUND else "pending_image_generation"},
         "poster_print_output": {"status": "not_requested" if mode == MODE_BACKGROUND or not postprocess_print else "pending_print_output"},
         "blocked_prompt_terms": blocked_terms,
+        "copy_warnings": copy_warnings,
     }
     if execute:
         status["image_generation"] = execute_image_generation(payload, package_dir / master_name)
@@ -875,6 +1394,7 @@ def build_package(
                     poster_master_output,
                     poster_copy,
                     dpi,
+                    text_style,
                 )
 
             if postprocess_print:
@@ -904,6 +1424,7 @@ def build_package(
                             poster_print_output,
                             poster_copy,
                             dpi,
+                            text_style,
                         )
         elif postprocess_print:
             status["print_output"] = {
@@ -977,6 +1498,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=MODE_BACKGROUND,
         help="background outputs a no-text background; poster composites local Chinese copy after generation.",
     )
+    parser.add_argument(
+        "--text-style",
+        choices=TEXT_STYLE_CHOICES,
+        default=TEXT_STYLE_CLEAN_EDU,
+        help="Local typography template used in poster mode.",
+    )
     parser.add_argument("--poster-copy", default="", help="Raw poster copy for poster mode.")
     parser.add_argument("--headline", help="Poster headline for poster mode.")
     parser.add_argument("--subtitle", help="Poster subtitle for poster mode.")
@@ -1022,6 +1549,7 @@ def main() -> int:
             args.execute,
             args.postprocess_print,
             args.mode,
+            args.text_style,
             args.poster_copy,
             args.headline,
             args.subtitle,
