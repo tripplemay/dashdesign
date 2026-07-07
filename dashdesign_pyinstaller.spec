@@ -20,6 +20,12 @@ def collect_datas():
         path = ROOT / file_name
         if path.exists():
             datas.append((str(path), "."))
+    baseline_dir = ROOT / "docs" / "baseline"
+    if baseline_dir.exists():
+        for file_name in ("README.md", "baseline.schema.json", "baseline.v1.draft.json"):
+            path = baseline_dir / file_name
+            if path.exists():
+                datas.append((str(path), "docs/baseline"))
     return datas
 
 

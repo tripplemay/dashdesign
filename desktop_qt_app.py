@@ -49,6 +49,7 @@ APP_ROOT = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT)).resolve()
 VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python"
 PYTHON = str(VENV_PYTHON if VENV_PYTHON.exists() else Path(sys.executable))
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
+BASELINE_RELATIVE_PATH = Path("docs") / "baseline" / "baseline.v1.draft.json"
 
 
 def read_app_version() -> str:
@@ -245,6 +246,30 @@ def platform_key() -> str:
     return "linux"
 
 
+def baseline_path() -> Path:
+    bundled = APP_ROOT / BASELINE_RELATIVE_PATH
+    if bundled.exists():
+        return bundled
+    return PROJECT_ROOT / BASELINE_RELATIVE_PATH
+
+
+def evidenced_text(value: object) -> str:
+    if isinstance(value, dict):
+        return str(value.get("text", "")).strip()
+    return str(value or "").strip()
+
+
+def text_list(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    output: list[str] = []
+    for value in values:
+        text = evidenced_text(value)
+        if text:
+            output.append(text)
+    return output
+
+
 class DashDesignQtApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -318,6 +343,7 @@ class DashDesignQtApp(QMainWindow):
         self.nav.setFrameShape(QFrame.Shape.NoFrame)
         self.nav.setSpacing(2)
         for key, label in [
+            ("baseline", "项目基线"),
             ("batch", "批量印刷"),
             ("gpt", "GPT 重建"),
             ("qr", "去二维码留空"),
@@ -350,6 +376,7 @@ class DashDesignQtApp(QMainWindow):
 
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.stack = QStackedWidget()
+        self.stack.addWidget(self._make_baseline_page())
         self.stack.addWidget(self._make_batch_page())
         self.stack.addWidget(self._make_gpt_page())
         self.stack.addWidget(self._make_qr_page())
@@ -383,6 +410,122 @@ class DashDesignQtApp(QMainWindow):
         if primary:
             button.setObjectName("PrimaryButton")
         return button
+
+    def _make_baseline_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        meta = QGroupBox("当前项目基线")
+        meta_layout = QGridLayout(meta)
+        self.baseline_name = QLabel("-")
+        self.baseline_version = QLabel("-")
+        self.baseline_status = QLabel("-")
+        self.baseline_mode = QLabel("-")
+        meta_layout.addWidget(QLabel("项目"), 0, 0)
+        meta_layout.addWidget(self.baseline_name, 0, 1)
+        meta_layout.addWidget(QLabel("版本"), 1, 0)
+        meta_layout.addWidget(self.baseline_version, 1, 1)
+        meta_layout.addWidget(QLabel("状态"), 2, 0)
+        meta_layout.addWidget(self.baseline_status, 2, 1)
+        meta_layout.addWidget(QLabel("受众"), 3, 0)
+        meta_layout.addWidget(self.baseline_mode, 3, 1)
+        meta_layout.setColumnStretch(1, 1)
+        layout.addWidget(meta)
+
+        actions = QHBoxLayout()
+        refresh = QPushButton("刷新基线")
+        refresh.clicked.connect(self.load_baseline_page)
+        open_file = QPushButton("打开 JSON")
+        open_file.clicked.connect(lambda: self.open_path(baseline_path()))
+        actions.addWidget(refresh)
+        actions.addWidget(open_file)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.baseline_summary = QPlainTextEdit()
+        self.baseline_summary.setObjectName("BaselineSummary")
+        self.baseline_summary.setReadOnly(True)
+        self.baseline_summary.setMinimumHeight(360)
+        layout.addWidget(self.baseline_summary, 1)
+
+        self.load_baseline_page()
+        return page
+
+    def load_baseline_page(self) -> None:
+        path = baseline_path()
+        if not path.exists():
+            self.baseline_name.setText("未找到")
+            self.baseline_version.setText("-")
+            self.baseline_status.setText("-")
+            self.baseline_mode.setText("-")
+            self.baseline_summary.setPlainText(f"未找到项目基线文件：\n{path}")
+            return
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            self.baseline_name.setText("读取失败")
+            self.baseline_version.setText("-")
+            self.baseline_status.setText("-")
+            self.baseline_mode.setText("-")
+            self.baseline_summary.setPlainText(f"项目基线读取失败：\n{exc}")
+            return
+
+        project = payload.get("project", {}) if isinstance(payload, dict) else {}
+        consumer = payload.get("consumer_baseline", {}) if isinstance(payload, dict) else {}
+        self.baseline_name.setText(str(project.get("name", "-")))
+        self.baseline_version.setText(str(payload.get("version", "-")))
+        self.baseline_status.setText(str(payload.get("status", "-")))
+        self.baseline_mode.setText(str(payload.get("target_audience_mode", "-")))
+        self.baseline_summary.setPlainText(self.format_baseline_summary(payload, path))
+
+    def format_baseline_summary(self, payload: dict, path: Path) -> str:
+        project = payload.get("project", {}) if isinstance(payload, dict) else {}
+        consumer = payload.get("consumer_baseline", {}) if isinstance(payload, dict) else {}
+        visual = payload.get("visual_guidelines", {}) if isinstance(payload, dict) else {}
+        prompt_policy = payload.get("prompt_policy", {}) if isinstance(payload, dict) else {}
+
+        sections: list[str] = [
+            f"文件：{path}",
+            "",
+            "C 端定位",
+            evidenced_text(consumer.get("positioning")),
+            "",
+            "核心信息",
+            *[f"- {item}" for item in text_list(consumer.get("core_messages"))],
+            "",
+            "家长价值",
+            *[f"- {item}" for item in text_list(consumer.get("parent_value"))],
+            "",
+            "孩子价值",
+            *[f"- {item}" for item in text_list(consumer.get("student_value"))],
+            "",
+            "课程模块",
+            *[f"- {item}" for item in consumer.get("course_modules", [])],
+            "",
+            "推荐画面",
+            *[f"- {item}" for item in visual.get("recommended_scenes", [])],
+            "",
+            "构图规则",
+            *[f"- {item}" for item in visual.get("composition_rules", [])],
+            "",
+            "禁止进入 C 端海报的关键词",
+            *[f"- {item}" for item in consumer.get("blocked_keywords", [])],
+            "",
+            "文生图负面约束",
+            *[f"- {item}" for item in prompt_policy.get("negative_constraints", [])],
+        ]
+        source_context = str(payload.get("source_context", ""))
+        if source_context == "to_b_partnership_docs":
+            sections.extend(
+                [
+                    "",
+                    "注意",
+                    "当前源资料主要是 to B 合作介绍；客户端只展示并使用转换后的 to C 家长/学生基线。",
+                ]
+            )
+        return "\n".join(sections).strip() + "\n"
 
     def _make_batch_page(self) -> QWidget:
         page = QWidget()
@@ -637,6 +780,15 @@ class DashDesignQtApp(QMainWindow):
                 font-family: Menlo, Monaco, Consolas, monospace;
                 font-size: 12px;
             }
+            QPlainTextEdit#BaselineSummary {
+                background: #ffffff;
+                color: #222222;
+                border: 1px solid #d9d9d9;
+                border-radius: 8px;
+                padding: 10px;
+                font-family: Menlo, Monaco, Consolas, monospace;
+                font-size: 12px;
+            }
             QWidget#PreviewPanel {
                 background: #ffffff;
                 border: 1px solid #d9d9d9;
@@ -650,6 +802,7 @@ class DashDesignQtApp(QMainWindow):
             return
         self.stack.setCurrentIndex(row)
         titles = [
+            ("项目基线", "查看当前 C 端海报生成基线，后续文生图会自动引用。"),
             ("批量印刷", "将根目录或指定目录中的图片输出为印刷规格。"),
             ("GPT 重建", "从源图生成 GPT Image 请求包，必要时直接调用 API。"),
             ("去二维码留空", "只清除指定二维码区域，后期手动添加二维码。"),
@@ -725,8 +878,10 @@ class DashDesignQtApp(QMainWindow):
     def build_current_command(self) -> tuple[list[str], Path, dict[str, str]]:
         row = self.nav.currentRow()
         if row == 0:
-            return self.build_batch_command()
+            raise ValueError("项目基线页面是只读预览，暂无可运行工作流。")
         if row == 1:
+            return self.build_batch_command()
+        if row == 2:
             return self.build_gpt_command()
         return self.build_qr_command()
 
@@ -837,13 +992,15 @@ class DashDesignQtApp(QMainWindow):
     def current_input_preview_path(self) -> Path | None:
         row = self.nav.currentRow()
         if row == 0:
+            return None
+        if row == 1:
             input_dir = Path(self.batch_input.text()).expanduser()
             only = self.batch_only.text().strip()
             if only:
                 path = input_dir / only
                 return path if path.exists() else None
             return first_image(input_dir)
-        if row == 1:
+        if row == 2:
             path = Path(self.gpt_source.text()).expanduser()
             return path if path.exists() else None
         path = Path(self.qr_input.text()).expanduser()
@@ -873,18 +1030,19 @@ class DashDesignQtApp(QMainWindow):
         path = Path(raw_path)
         if path.is_dir():
             self.batch_input.setText(str(path))
-            self.nav.setCurrentRow(0)
+            self.nav.setCurrentRow(1)
             self.preview_input()
             return
         if path.suffix.lower() not in IMAGE_EXTENSIONS:
             return
-        if self.nav.currentRow() == 1:
+        if self.nav.currentRow() == 2:
             self.gpt_source.setText(str(path))
-        elif self.nav.currentRow() == 2:
+        elif self.nav.currentRow() == 3:
             self.qr_input.setText(str(path))
         else:
             self.batch_input.setText(str(path.parent))
             self.batch_only.setText(path.name)
+            self.nav.setCurrentRow(1)
         self.load_preview(path)
 
     def open_last_output(self) -> None:

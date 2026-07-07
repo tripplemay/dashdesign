@@ -28,7 +28,14 @@ Install desktop dependencies:
 
 ## Workflows
 
-### 1. Batch Print
+### 1. Project Baseline
+
+Reads `docs/baseline/baseline.v1.draft.json` and shows the current to-C parent
+and student poster baseline. This page is read-only for now. It is the local
+preview surface for the future cloud-synchronized baseline service and
+text-to-image prompt injection.
+
+### 2. Batch Print
 
 Two modes are available:
 
@@ -42,7 +49,7 @@ logo positions, and QR-code positions. It does not rebuild text or QR codes.
 The basic mode is the stable PIL/Lanczos fallback. It is useful when
 Real-ESRGAN is not needed or when you want the simplest deterministic output.
 
-### 2. GPT Rebuild
+### 3. GPT Rebuild
 
 Calls `scripts/gpt_image_rebuild.py`.
 
@@ -51,7 +58,7 @@ poster. If `Execute API` is not checked, the tool only creates the request
 package. If checked, `OPENAI_API_KEY` is passed only as an environment variable
 for that process and is not written to project files.
 
-### 3. Remove QR Area
+### 4. Remove QR Area
 
 Calls `scripts/remove_qr_area.py`.
 

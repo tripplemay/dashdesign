@@ -6,6 +6,7 @@ images into print-ready assets.
 The current desktop client is built with PySide6 / Qt and wraps the validated
 image workflows:
 
+- project baseline preview for the current to-C poster generation draft
 - batch print output with style-preserved super-resolution
 - GPT Image rebuild package generation/execution
 - QR-code area removal for manual QR replacement
