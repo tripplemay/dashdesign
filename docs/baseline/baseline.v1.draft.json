@@ -1,0 +1,574 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "ai_digital_creation_course",
+  "version": "2026.07.06.1",
+  "parent_version": null,
+  "status": "draft",
+  "target_audience_mode": "to_c_parent_student",
+  "source_context": "to_b_partnership_docs",
+  "source_documents": [
+    {
+      "document_id": "smart_classroom_pdf",
+      "file": "docs/baseline/智能教室项目介绍.pdf",
+      "type": "project_intro",
+      "role": "general_project_baseline",
+      "status": "active"
+    },
+    {
+      "document_id": "smart_classroom_doc",
+      "file": "docs/baseline/智能教室项目介绍.doc",
+      "type": "project_intro_source",
+      "role": "duplicate_source_for_smart_classroom_pdf",
+      "status": "duplicate"
+    },
+    {
+      "document_id": "art_ai_pdf",
+      "file": "docs/baseline/美术+AI项目介绍.pdf",
+      "type": "vertical_intro",
+      "role": "art_ai_vertical_baseline",
+      "status": "active"
+    }
+  ],
+  "project": {
+    "name": "AI 数字化创作课程",
+    "aliases": [
+      "AI 数字化科创课程",
+      "AI 智能美术创作课程",
+      "传统美术 + AI 数字化升级",
+      "AI 数字艺术课程"
+    ],
+    "category": [
+      "青少年素质教育",
+      "AI 教育",
+      "数字艺术",
+      "科创教育",
+      "艺术与科技融合"
+    ],
+    "core_positioning": {
+      "text": "面向 6-18 岁青少年的 AI 数字化创作课程，围绕 AI 绘图、AI 视频、AI 漫剧和网页/小程序设计，帮助孩子把想象力、艺术表达和数字工具结合，形成可展示的创作成果。",
+      "confidence": 0.91,
+      "evidence": ["ev_sc_age_course", "ev_sc_modules", "ev_art_modules"],
+      "notes": "这是从 B 端合作资料转换后的 C 端课程定位，不使用原文中的招商合作表达。"
+    },
+    "business_context": {
+      "text": "原始资料主要面向 B 端教育机构合作，包含大量机构经营、入驻、增收和落地扶持内容；这些内容只作为项目来源事实，不直接进入 C 端海报 prompt。",
+      "confidence": 0.96,
+      "evidence": ["ev_sc_project_overview", "ev_sc_business_terms", "ev_art_business_terms"]
+    }
+  },
+  "source_facts": {
+    "raw_audience": {
+      "b_side_customers": [
+        {
+          "text": "教培机构、青少年综合体、托管中心、文化艺术机构等线下教育经营主体。",
+          "confidence": 0.95,
+          "evidence": ["ev_sc_b_customers"]
+        },
+        {
+          "text": "美术培训机构、艺术综合体、书画美育机构、托管中心、综合文创教培机构等美术艺术类 B 端机构。",
+          "confidence": 0.95,
+          "evidence": ["ev_art_b_customers"]
+        }
+      ],
+      "decision_makers": [
+        {
+          "text": "原始资料中的直接合作对象是教育机构经营者；C 端传播时应改写为面向家长和孩子的课程价值。",
+          "confidence": 0.82,
+          "evidence": ["ev_sc_b_customers", "ev_sc_business_terms"]
+        }
+      ],
+      "end_users": [
+        {
+          "text": "适配 6-18 岁青少年学习。",
+          "confidence": 0.98,
+          "evidence": ["ev_sc_age_course"]
+        }
+      ]
+    },
+    "course_system": [
+      {
+        "id": "ai_creative_drawing",
+        "name": "AI 创意绘图",
+        "description": "帮助孩子将脑海创意、手绘平面作品或创意构思通过 AI 工具进行数字化升级，生成艺术画作、插画、国潮作品或创意设计图。",
+        "student_outcomes": [
+          "提升审美能力",
+          "培养 AI 创意思维",
+          "让绘画成果更高级、更可展示",
+          "把平面手绘升级为数字化艺术作品"
+        ],
+        "evidence": ["ev_sc_ai_drawing", "ev_art_ai_drawing"]
+      },
+      {
+        "id": "ai_video_creation",
+        "name": "AI 动态视频创作",
+        "description": "通过 AI 工具把静态绘画作品或创意内容转化为动态动画视频、创意短片、艺术动态 MV 或特效影片。",
+        "student_outcomes": [
+          "让静态作品动起来",
+          "获得更强的成果展示感",
+          "学习数字内容创作"
+        ],
+        "evidence": ["ev_sc_ai_video", "ev_art_ai_video"]
+      },
+      {
+        "id": "ai_comic_story",
+        "name": "AI 原创漫剧",
+        "description": "引导孩子设计角色、人设、故事场景和情节，通过 AI 生成原创漫剧或短片作品。",
+        "student_outcomes": [
+          "锻炼故事创作",
+          "提升逻辑表达",
+          "培养想象力",
+          "结合美术造型与剧情表达"
+        ],
+        "evidence": ["ev_sc_ai_comic", "ev_art_ai_comic"]
+      },
+      {
+        "id": "web_miniprogram_design",
+        "name": "网页与小程序可视化设计",
+        "description": "学习简易网页制作、小程序页面设计和数字 UI 表达，把插画、设计和创意作品应用到数字界面中。",
+        "student_outcomes": [
+          "掌握数字化应用表达",
+          "理解 UI 和可视化设计",
+          "连接艺术设计、数字媒体和未来技能"
+        ],
+        "evidence": ["ev_sc_web_miniprogram", "ev_art_web_miniprogram"]
+      }
+    ],
+    "education_values": [
+      {
+        "text": "课程强调实操落地、趣味性、实用性和前沿性。",
+        "confidence": 0.9,
+        "evidence": ["ev_sc_age_course"]
+      },
+      {
+        "text": "课程培养创新思维、创作能力、科创素养、审美能力、逻辑表达和故事创作能力。",
+        "confidence": 0.9,
+        "evidence": ["ev_sc_core_value", "ev_art_ai_comic", "ev_art_ai_drawing"]
+      },
+      {
+        "text": "在美术垂直场景中，核心原则是美术为本，AI 是升级工具，不替代传统美术基础。",
+        "confidence": 0.97,
+        "evidence": ["ev_art_not_replace", "ev_art_parent_perception"]
+      }
+    ],
+    "business_terms": [
+      {
+        "text": "零成本入驻、零门槛落地、高增收赋能。",
+        "confidence": 0.98,
+        "evidence": ["ev_sc_project_overview"],
+        "notes": "B 端合作话术，不允许进入 C 端海报 prompt。"
+      },
+      {
+        "text": "拓宽招生渠道、提升校区竞争力、低成本转型升级、稳定增收。",
+        "confidence": 0.96,
+        "evidence": ["ev_sc_project_overview"],
+        "notes": "B 端经营价值，不允许直接进入 C 端海报 prompt。"
+      },
+      {
+        "text": "加盟费、研发费、设备费、培训费、师训体系、招生文案、家长话术、成果展示模板。",
+        "confidence": 0.95,
+        "evidence": ["ev_sc_business_terms", "ev_art_business_terms"],
+        "notes": "运营扶持内容，不用于 C 端出图。"
+      }
+    ],
+    "consumer_safe_facts": [
+      {
+        "text": "AI 绘图、AI 视频、AI 漫剧、网页与小程序设计是稳定的课程能力主轴。",
+        "confidence": 0.96,
+        "evidence": ["ev_sc_modules", "ev_art_modules"]
+      },
+      {
+        "text": "孩子可以把手绘、创意构思、角色故事和作品成果升级为数字化作品。",
+        "confidence": 0.93,
+        "evidence": ["ev_art_ai_drawing", "ev_art_ai_video", "ev_art_ai_comic"]
+      },
+      {
+        "text": "家长关心孩子接轨前沿科技、掌握未来技能和拥有更可展示的学习成果。",
+        "confidence": 0.87,
+        "evidence": ["ev_sc_parent_trend", "ev_art_parent_perception"]
+      }
+    ]
+  },
+  "audience_transform_rules": {
+    "from": "to_b_partnership",
+    "to": "to_c_parent_student",
+    "preserve": [
+      "course_modules",
+      "student_age",
+      "learning_outcomes",
+      "creative_outputs",
+      "education_positioning",
+      "art_ai_not_replacing_art"
+    ],
+    "rewrite": [
+      {
+        "source_concept": "机构低成本布局 AI 科创赛道",
+        "target_expression": "孩子低门槛接触 AI 创作和未来数字技能"
+      },
+      {
+        "source_concept": "校区差异化卖点",
+        "target_expression": "课程更有科技感、成果感和创造力展示"
+      },
+      {
+        "source_concept": "机构拓客增收、续费提升",
+        "target_expression": "家长能看到孩子成长、作品成果和未来能力提升"
+      },
+      {
+        "source_concept": "美术机构嫁接 AI",
+        "target_expression": "孩子在传统美术基础上学习 AI 数字艺术创作"
+      }
+    ],
+    "remove": [
+      "零成本入驻",
+      "招商合作",
+      "加盟费",
+      "机构增收",
+      "校区竞争力",
+      "客单价",
+      "续费率",
+      "转化率",
+      "师训体系",
+      "运营扶持",
+      "合作机构"
+    ],
+    "gating_rule": "When target_audience_mode is to_c_parent_student, B-side business_terms may be used only as private traceability context. They must not be injected into image prompts, poster copy, or visual scene suggestions."
+  },
+  "consumer_baseline": {
+    "audience": {
+      "primary_decision_maker": "家长",
+      "end_user": "6-18 岁青少年",
+      "secondary_audience": [
+        "对 AI 创作感兴趣的孩子",
+        "少儿美术学员",
+        "希望提升数字化表达能力的学生"
+      ]
+    },
+    "positioning": {
+      "text": "AI 数字化创作课程面向孩子和家长，帮助孩子把想象力、美术表达、故事创作和 AI 工具结合，完成更有科技感、展示感和未来感的数字作品。",
+      "confidence": 0.9,
+      "evidence": ["ev_sc_age_course", "ev_sc_modules", "ev_art_parent_perception"]
+    },
+    "core_messages": [
+      {
+        "text": "孩子不是只学工具，而是在学习 AI 时代的创作方式。",
+        "confidence": 0.82,
+        "evidence": ["ev_sc_core_value", "ev_sc_parent_trend"]
+      },
+      {
+        "text": "AI 帮助孩子把想象力、手绘草图和故事构思变成高质量数字作品。",
+        "confidence": 0.9,
+        "evidence": ["ev_art_ai_drawing", "ev_art_ai_video", "ev_art_ai_comic"]
+      },
+      {
+        "text": "传统美术基础与 AI 创作能力结合，AI 是升级，不是替代。",
+        "confidence": 0.97,
+        "evidence": ["ev_art_not_replace", "ev_art_parent_perception"]
+      },
+      {
+        "text": "从绘图、视频、漫剧到网页/小程序设计，形成完整的数字创作能力链路。",
+        "confidence": 0.92,
+        "evidence": ["ev_sc_modules"]
+      }
+    ],
+    "parent_value": [
+      {
+        "text": "提升孩子审美力、创造力和 AI 创意思维。",
+        "confidence": 0.9,
+        "evidence": ["ev_sc_ai_drawing", "ev_art_ai_drawing"]
+      },
+      {
+        "text": "让孩子拥有更可展示、可分享的数字化作品成果。",
+        "confidence": 0.93,
+        "evidence": ["ev_art_ai_video", "ev_art_ai_drawing"]
+      },
+      {
+        "text": "帮助孩子接轨 AI 时代的前沿科技和未来技能。",
+        "confidence": 0.88,
+        "evidence": ["ev_sc_parent_trend", "ev_sc_core_value"]
+      },
+      {
+        "text": "在美术基础上拓展数字艺术、故事表达和应用设计能力。",
+        "confidence": 0.9,
+        "evidence": ["ev_art_not_replace", "ev_art_web_miniprogram"]
+      }
+    ],
+    "student_value": [
+      {
+        "text": "让自己的画动起来，变成动态视频或创意短片。",
+        "confidence": 0.95,
+        "evidence": ["ev_art_ai_video"]
+      },
+      {
+        "text": "把脑海里的角色和故事做成原创漫剧。",
+        "confidence": 0.94,
+        "evidence": ["ev_sc_ai_comic", "ev_art_ai_comic"]
+      },
+      {
+        "text": "用 AI 把草图和创意构思升级成专属艺术作品。",
+        "confidence": 0.95,
+        "evidence": ["ev_art_ai_drawing"]
+      },
+      {
+        "text": "尝试设计自己的网页、小程序和数字界面作品。",
+        "confidence": 0.92,
+        "evidence": ["ev_sc_web_miniprogram", "ev_art_web_miniprogram"]
+      }
+    ],
+    "course_modules": [
+      "AI 创意绘图",
+      "AI 动态视频创作",
+      "AI 原创漫剧",
+      "网页与小程序可视化设计"
+    ],
+    "allowed_keywords": [
+      "AI 创作",
+      "数字艺术",
+      "未来技能",
+      "想象力",
+      "创造力",
+      "审美力",
+      "科创素养",
+      "作品成果",
+      "艺术与科技融合",
+      "未来课堂",
+      "智能美术",
+      "原创漫剧",
+      "动态视频",
+      "网页设计",
+      "小程序设计"
+    ],
+    "blocked_keywords": [
+      "零成本入驻",
+      "招商合作",
+      "合作机构",
+      "加盟",
+      "拓客",
+      "机构增收",
+      "续费",
+      "客单价",
+      "校区经营",
+      "师训",
+      "招生话术",
+      "加盟费",
+      "研发费"
+    ],
+    "claims_policy": {
+      "allowed": [
+        "课程培养 AI 创作、审美、想象力、数字表达等能力",
+        "课程帮助孩子完成可展示的数字化创作成果",
+        "课程结合传统美术和 AI 工具"
+      ],
+      "requires_review": [
+        "政策支持、国家趋势、升学相关表达",
+        "具体年龄段之外的人群承诺",
+        "收益、报名、学习效果量化承诺"
+      ],
+      "forbidden": [
+        "保证孩子掌握某项技能",
+        "保证升学或竞赛结果",
+        "保证机构或个人收益",
+        "暗示 AI 替代老师或替代传统美术基础"
+      ]
+    }
+  },
+  "visual_guidelines": {
+    "style_keywords": [
+      "明亮科技感",
+      "未来课堂",
+      "数字艺术",
+      "亲和教育感",
+      "青少年创造力",
+      "艺术与科技融合",
+      "高品质商业海报背景"
+    ],
+    "recommended_subjects": [
+      "孩子在数字画板或平板上进行 AI 艺术创作",
+      "孩子展示由手绘升级而来的数字作品",
+      "未来感教室中的 AI 创作场景",
+      "数字画作、动画分镜、漫剧角色和网页界面以视觉元素形式环绕"
+    ],
+    "recommended_scenes": [
+      "明亮未来教室",
+      "AI 数字艺术工作室",
+      "孩子和数字画面互动",
+      "艺术作品从纸面延展到屏幕和光效空间",
+      "课程模块以图标化视觉区域呈现但不生成可读文字"
+    ],
+    "composition_rules": [
+      "保留顶部标题安全区",
+      "保留中部课程模块展示区",
+      "保留底部行动区和二维码预留区",
+      "主视觉应面向家长和孩子，而不是机构经营者",
+      "不要让模型直接生成正式中文文案"
+    ],
+    "avoid_scenes": [
+      "商务会议",
+      "签约合作",
+      "校长招商",
+      "机构经营看板",
+      "收益增长图表",
+      "加盟宣传",
+      "老师培训会",
+      "真实品牌 logo",
+      "可读乱码文字",
+      "二维码"
+    ],
+    "text_generation_policy": "图像模型只生成背景、主视觉和留白区域。正式标题、课程文案、电话、二维码、logo 和价格必须作为后期可控图层处理。"
+  },
+  "prompt_policy": {
+    "system_context": "You are generating to-C parent/student enrollment poster background artwork for an AI digital creation course. Use only the consumer_baseline and visual_guidelines. Do not use B-side partnership or institution-operation language.",
+    "positive_prompt_template": "Generate a polished poster background for an AI digital creation course for children and parents. Show a bright future classroom or digital art studio where children create AI-assisted artwork. Include visual hints of AI drawing, dynamic video, original comic storytelling, and web/miniprogram design as non-text visual elements. The mood should feel creative, educational, trustworthy, modern, and inspiring. Preserve safe empty areas for headline, course module copy, call-to-action, and QR code.",
+    "negative_constraints": [
+      "No readable Chinese or English text",
+      "No QR code",
+      "No logo or real brand mark",
+      "No phone number or price",
+      "No business meeting or partnership-signing scene",
+      "No franchise, revenue, sales, customer acquisition, or school-operation concept",
+      "No distorted children, hands, screens, or fake UI text",
+      "No watermark or signature"
+    ],
+    "injection_order": [
+      "target_audience_mode",
+      "consumer_baseline.positioning",
+      "consumer_baseline.core_messages",
+      "visual_guidelines",
+      "user_current_request",
+      "prompt_policy.negative_constraints",
+      "print_production_constraints"
+    ]
+  },
+  "evidence_index": [
+    {
+      "id": "ev_sc_project_overview",
+      "document_id": "smart_classroom_pdf",
+      "section": "一、项目概述",
+      "quote": "本项目是面向教培机构、青少年综合体、托管中心、文化艺术机构等各类 B 端教育主体的轻量化赋能合作项目，主打零成本入驻、零门槛落地、高增收赋能的合作模式。"
+    },
+    {
+      "id": "ev_sc_b_customers",
+      "document_id": "smart_classroom_pdf",
+      "section": "二、目标合作客群",
+      "quote": "覆盖全品类青少年教育经营主体，具体包括：各大少儿编程培训机构、综合素养教培机构、课后托管中心、文体艺术培训机构、青少年成长综合体等。"
+    },
+    {
+      "id": "ev_sc_age_course",
+      "document_id": "smart_classroom_pdf",
+      "section": "三、核心课程体系",
+      "quote": "从创意数字化创作到实用技术开发层层递进，全程以实操落地为主，趣味性、实用性、前沿性兼备，适配 6-18 岁青少年学习。"
+    },
+    {
+      "id": "ev_sc_modules",
+      "document_id": "smart_classroom_pdf",
+      "section": "三、核心课程体系",
+      "quote": "完整课程体系分为四大核心板块：AI 创意绘图课程、AI 智能视频创作课程、AI 漫剧原创设计课程、网页与小程序开发课程。"
+    },
+    {
+      "id": "ev_sc_ai_drawing",
+      "document_id": "smart_classroom_pdf",
+      "section": "三、核心课程体系 / AI 创意绘图课程",
+      "quote": "帮助孩子将脑海中的创意、手绘平面作品，通过 AI 工具数字化升级，实现智能创图、特效优化、创意衍生，让静态绘画变为数字化艺术作品，培养孩子审美能力与 AI 创意思维。"
+    },
+    {
+      "id": "ev_sc_ai_video",
+      "document_id": "smart_classroom_pdf",
+      "section": "三、核心课程体系 / AI 智能视频创作课程",
+      "quote": "教学员自主制作创意短视频、动态科普视频、创意特效影片，无需复杂剪辑技巧，零基础即可上手，掌握当下主流的 AI 数字化内容创作能力。"
+    },
+    {
+      "id": "ev_sc_ai_comic",
+      "document_id": "smart_classroom_pdf",
+      "section": "三、核心课程体系 / AI 漫剧原创设计课程",
+      "quote": "引导孩子独立构思故事场景、人物人设、情节脉络，通过 AI 工具一键生成专属漫剧作品，充分锻炼孩子的逻辑思维、剧本创作、想象力与内容原创能力。"
+    },
+    {
+      "id": "ev_sc_web_miniprogram",
+      "document_id": "smart_classroom_pdf",
+      "section": "三、核心课程体系 / 网页与小程序开发课程",
+      "quote": "带领孩子学习简易网页制作、个性化小程序开发，打通 AI 创意创作与实用编程开发的链路，接轨数字化时代核心技能。"
+    },
+    {
+      "id": "ev_sc_parent_trend",
+      "document_id": "smart_classroom_pdf",
+      "section": "四、核心合作优势 / 紧跟时代趋势",
+      "quote": "多数家长迫切希望孩子接轨前沿科技、掌握未来核心技能。"
+    },
+    {
+      "id": "ev_sc_core_value",
+      "document_id": "smart_classroom_pdf",
+      "section": "五、项目核心价值",
+      "quote": "让青少儿脱离传统单一学习模式，沉浸式学习前沿 AI 数字化技能，培养创新思维、创作能力与科创素养。"
+    },
+    {
+      "id": "ev_sc_business_terms",
+      "document_id": "smart_classroom_pdf",
+      "section": "四、核心合作优势",
+      "quote": "无需新增大额投资，无需改造校区硬件，直接落地开课；可快速打造校区核心差异化卖点，有效吸引新生报名、激活老生续费、提升客单价。"
+    },
+    {
+      "id": "ev_art_b_customers",
+      "document_id": "art_ai_pdf",
+      "section": "二、核心合作客群",
+      "quote": "项目精准适配以美术艺术类为主的 B 端机构：美术培训机构、艺术综合体、书画美育机构、托管中心、综合文创教培机构等。"
+    },
+    {
+      "id": "ev_art_not_replace",
+      "document_id": "art_ai_pdf",
+      "section": "三、项目核心逻辑",
+      "quote": "本项目不是替代美术，而是升级美术。"
+    },
+    {
+      "id": "ev_art_parent_perception",
+      "document_id": "art_ai_pdf",
+      "section": "三、项目核心逻辑",
+      "quote": "孩子学的依旧是正统美术功底，只是多了 AI 新时代创作能力，是进阶、是拔高、是与时俱进的升级课程，不是换课、不是转行。"
+    },
+    {
+      "id": "ev_art_modules",
+      "document_id": "art_ai_pdf",
+      "section": "四、四大阶梯式 AI 升级课程体系",
+      "quote": "AI 智能创意绘图、AI 动态视频创作、AI 原创漫剧剧本创作、网页&小程序可视化开发。"
+    },
+    {
+      "id": "ev_art_ai_drawing",
+      "document_id": "art_ai_pdf",
+      "section": "四、AI 智能创意绘图",
+      "quote": "基于孩子线下所学的构图、配色、造型美术功底，结合 AI 创图工具，将孩子的手绘草图、创意构思，一键优化、智能渲染、风格升级，生成高清艺术画作、插画、国潮作品、创意设计图。"
+    },
+    {
+      "id": "ev_art_ai_video",
+      "document_id": "art_ai_pdf",
+      "section": "四、AI 动态视频创作",
+      "quote": "将孩子的静态绘画作品，通过 AI 技术转化为动态动画视频、创意短片、艺术动态 MV。"
+    },
+    {
+      "id": "ev_art_ai_comic",
+      "document_id": "art_ai_pdf",
+      "section": "四、AI 原创漫剧剧本创作",
+      "quote": "自主编写剧情、设计角色人设、搭建故事场景，通过 AI 生成完整原创漫剧短片。"
+    },
+    {
+      "id": "ev_art_web_miniprogram",
+      "document_id": "art_ai_pdf",
+      "section": "四、网页&小程序可视化开发",
+      "quote": "让孩子学会将自己的美术插画、原创设计作品，应用到网页界面、小程序页面设计中，掌握数字 UI 设计、可视化创作能力。"
+    },
+    {
+      "id": "ev_art_business_terms",
+      "document_id": "art_ai_pdf",
+      "section": "五、机构合作核心优势",
+      "quote": "全程无加盟费、无设备费、无培训费、无改版费；提供全套教案、课件、示范视频、师训体系、招生文案、家长话术、成果展示模板。"
+    }
+  ],
+  "governance": {
+    "draft_policy": "Uploaded documents generate draft baseline versions only. Drafts may be edited and reviewed but must not affect desktop generation until published.",
+    "publish_policy": "Published versions are immutable. Any document enhancement or manual change creates a new draft version with parent_version and evidence-linked diff.",
+    "generation_record_policy": "Every image generation must record baseline_id, baseline version, target_audience_mode, profile hash, prompt template version, model, size, and output files."
+  },
+  "unmapped_findings": [
+    {
+      "text": "原始文档中有较多机构经营和合作政策内容，当前 schema 已归入 business_terms；如果未来需要做 to-B 招商海报，应单独启用 to_b_partnership 模式。",
+      "confidence": 0.94,
+      "evidence": ["ev_sc_business_terms", "ev_art_business_terms"]
+    }
+  ]
+}
