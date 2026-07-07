@@ -559,18 +559,33 @@ class DashDesignQtApp(QMainWindow):
         path_layout.addWidget(self.t2i_output)
         layout.addWidget(paths)
 
-        prompt_box = QGroupBox("提示词")
+        prompt_box = QGroupBox("画面提示词")
         prompt_layout = QVBoxLayout(prompt_box)
         self.t2i_prompt = QPlainTextEdit()
         self.t2i_prompt.setObjectName("TextPrompt")
-        self.t2i_prompt.setPlaceholderText("描述这次要生成的海报背景、场景、主体、氛围和构图要求。")
+        self.t2i_prompt.setPlaceholderText("只描述背景、场景、主体、氛围和构图要求，不粘贴完整海报文案。")
         self.t2i_prompt.setMinimumHeight(130)
         prompt_layout.addWidget(self.t2i_prompt)
         layout.addWidget(prompt_box)
 
+        self.t2i_copy_box = QGroupBox("海报文案（带文字海报模式）")
+        copy_layout = QVBoxLayout(self.t2i_copy_box)
+        self.t2i_copy = QPlainTextEdit()
+        self.t2i_copy.setObjectName("TextPrompt")
+        self.t2i_copy.setPlaceholderText(
+            "可粘贴：主标题、副标题、课程类型/模块、结语/行动语。背景模式会忽略这里。"
+        )
+        self.t2i_copy.setMinimumHeight(120)
+        copy_layout.addWidget(self.t2i_copy)
+        layout.addWidget(self.t2i_copy_box)
+
         params = QGroupBox("生成与印刷参数")
         params_layout = QVBoxLayout(params)
         params_layout.setSpacing(10)
+        self.t2i_mode = QComboBox()
+        self.t2i_mode.addItem("无文字背景", "background")
+        self.t2i_mode.addItem("带文字海报", "poster")
+        self.t2i_mode.currentIndexChanged.connect(self.sync_text_image_mode)
         self.t2i_width_cm = QLineEdit("120")
         self.t2i_height_cm = QLineEdit("80")
         self.t2i_dpi = QLineEdit("200")
@@ -585,6 +600,13 @@ class DashDesignQtApp(QMainWindow):
         self.t2i_execute = QCheckBox("立即调用 API")
         self.t2i_postprocess = QCheckBox("生成后输出印刷尺寸")
         self.t2i_postprocess.setChecked(True)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(8)
+        mode_row.addWidget(QLabel("输出类型"))
+        mode_row.addWidget(self.t2i_mode)
+        mode_row.addStretch(1)
+        params_layout.addLayout(mode_row)
 
         size_row = QHBoxLayout()
         size_row.setSpacing(8)
@@ -633,7 +655,14 @@ class DashDesignQtApp(QMainWindow):
         layout.addStretch(1)
         scroll.setWidget(content)
         page_layout.addWidget(scroll)
+        self.sync_text_image_mode()
         return page
+
+    def sync_text_image_mode(self) -> None:
+        if not hasattr(self, "t2i_mode") or not hasattr(self, "t2i_copy_box"):
+            return
+        poster_mode = self.t2i_mode.currentData() == "poster"
+        self.t2i_copy_box.setEnabled(poster_mode)
 
     def _make_batch_page(self) -> QWidget:
         page = QWidget()
@@ -1015,6 +1044,10 @@ class DashDesignQtApp(QMainWindow):
         prompt = self.t2i_prompt.toPlainText().strip()
         if not prompt:
             raise ValueError("请填写文生图提示词")
+        mode = str(self.t2i_mode.currentData() or "background")
+        poster_copy = self.t2i_copy.toPlainText().strip()
+        if mode == "poster" and not poster_copy:
+            raise ValueError("带文字海报模式需要填写海报文案")
         try:
             width_cm = float(self.t2i_width_cm.text().strip())
             height_cm = float(self.t2i_height_cm.text().strip())
@@ -1039,11 +1072,15 @@ class DashDesignQtApp(QMainWindow):
             str(dpi),
             "--prompt",
             prompt,
+            "--mode",
+            mode,
             "--image-size",
             self.t2i_image_size.currentText(),
             "--quality",
             self.t2i_quality.currentText(),
         ]
+        if poster_copy:
+            command += ["--poster-copy", poster_copy]
         if self.t2i_execute.isChecked():
             command.append("--execute")
         if self.t2i_postprocess.isChecked():

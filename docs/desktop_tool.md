@@ -44,6 +44,15 @@ automatically injecting the current project baseline. The workflow uses only the
 to-C parent/student baseline fields, visual guidelines, and prompt policy. It
 does not inject the raw to-B partnership terms from the source documents.
 
+Two output types are available:
+
+- No-text background: the image model generates only the background/master art.
+  Final title, course copy, logo, phone number, QR code, and price remain
+  outside the model output.
+- Poster with copy: the image model still generates only the background layer,
+  then DashDesign composes the supplied Chinese poster copy locally. This avoids
+  model-made Chinese typos and keeps print text deterministic.
+
 If `Execute API` is not checked, the tool creates an offline package containing
 the final prompt, baseline context, request JSON, and generation record. If
 checked, `OPENAI_API_KEY` is passed only as an environment variable for that
@@ -51,9 +60,10 @@ process and is not written to project files. When print post-processing is
 enabled, the generated master is resized to the requested centimeter size and
 DPI.
 
-The image model is instructed to generate background and main visual artwork
-only. Final headline text, course copy, phone numbers, logos, QR codes, and
-prices remain controlled production layers outside the model output.
+Keep the visual prompt and poster copy separate. The visual prompt should
+describe scene, subject, mood, layout, and safe areas. The poster copy field can
+accept pasted text such as `主标题：...`, `副标题：...`, `课程类型：...`,
+and `结语：...`.
 
 ### 3. Batch Print
 

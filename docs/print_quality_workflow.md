@@ -100,6 +100,15 @@ Pipeline:
 4. Optionally execute the Image API call to generate a master image.
 5. Optionally resize the master to the requested centimeter size and DPI.
 
+Modes:
+
+- `background`: no-text background output. The prompt keeps readable text, QR
+  codes, logos, prices, and phone numbers out of the model image.
+- `poster`: background generation plus local typography composition. The image
+  model is still asked not to render final text; DashDesign writes exact Chinese
+  copy locally into `poster_master.png` and, when print post-processing is
+  enabled, the print-ready poster.
+
 Command to prepare a package:
 
 ```bash
@@ -108,7 +117,20 @@ python3 scripts/text_to_image_print.py \
   --height-cm 80 \
   --dpi 200 \
   --output-dir workflow_samples/text_to_image_print \
+  --mode background \
   --prompt '明亮未来教室中，孩子用平板进行 AI 数字艺术创作，画面包含绘图、视频、漫剧和网页设计的抽象视觉元素，顶部和底部预留文案区域。'
+```
+
+Command to prepare a poster-with-copy package:
+
+```bash
+python3 scripts/text_to_image_print.py \
+  --width-cm 120 \
+  --height-cm 80 \
+  --dpi 200 \
+  --mode poster \
+  --prompt '明亮未来教室，孩子使用平板进行 AI 数字艺术创作，横版海报构图，顶部标题区和中部模块区留白。' \
+  --poster-copy $'主标题：AI浪潮已到来，孩子的学习怎能落后\n副标题：AI是未来的核心语言，现在不学，孩子未来就会像文盲一样\n课程类型：\nAI绘图：输入文字，一键生成精美画作\nAI视频：轻松创作专属动画\n结语：限时福利，前50名扫码预约即可获得免费AI课程'
 ```
 
 To execute the Image API call after configuring credentials:
@@ -121,6 +143,7 @@ python3 scripts/text_to_image_print.py \
   --height-cm 80 \
   --dpi 200 \
   --prompt '明亮未来教室中，孩子用平板进行 AI 数字艺术创作，画面包含绘图、视频、漫剧和网页设计的抽象视觉元素。' \
+  --mode background \
   --execute \
   --postprocess-print
 ```
