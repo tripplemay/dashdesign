@@ -154,6 +154,42 @@ python3 scripts/text_to_image_print.py \
 This workflow blocks prompts containing the current C-side baseline's forbidden
 B-side business terms unless explicitly overridden for development.
 
+## Workflow D: Complete Poster Image2
+
+Use when the priority is strong poster typography and integrated commercial
+poster design, and when model-rendered Chinese text can be reviewed before
+production.
+
+Pipeline:
+
+1. Load the current to-C project baseline.
+2. Parse the user poster copy into exact expected text.
+3. Prompt `gpt-image-2` to generate the complete poster, including background,
+   headline lettering, module badges, call-to-action, and QR placeholder.
+4. Generate multiple candidates.
+5. Review candidates against `expected_text.json`.
+6. Reject candidates with wrong, missing, duplicated, or extra text.
+7. Add the real QR code only after image approval.
+8. Feed the approved master through Workflow A for print DPI output.
+
+Command:
+
+```bash
+python3 scripts/full_poster_image2.py \
+  --width-cm 120 \
+  --height-cm 80 \
+  --dpi 200 \
+  --image-size 1536x1024 \
+  --candidates 4 \
+  --prompt '横版少儿 AI 数字创作招生海报，孩子在未来数字艺术教室中用平板创作，整体要有真实商业海报的标题设计和促销氛围。' \
+  --poster-copy $'主标题：驾驭AI浪潮，就是现在！\n副标题：科技革命不等人，AI正在重塑世界，现在是孩子学习AI的黄金窗口期！\n课程类型：\nAI数字绘图：把想象变成精美作品\nAI动态视频创作：让故事动起来\nAI漫剧创编：培养叙事与创作能力\nAI网页&小程序：用作品理解科技\n结语：立即行动，扫码预约免费AI能力测评'
+```
+
+Add `--execute` after configuring Image API credentials. The package includes
+`expected_text.json` for manual or future OCR-based review.
+
+See `docs/full_poster_image2_evaluation.md` for the first local evaluation.
+
 ## GPT Image Constraints
 
 The OpenAI image generation guide says `gpt-image-2` supports arbitrary sizes
@@ -172,7 +208,9 @@ Image output is therefore a master layer, not the final print file.
 - Faithful 200 DPI sample generation is fully runnable locally.
 - Baseline text-to-image package generation is runnable locally.
 - GPT Image rebuild package generation is runnable locally.
-- Actual GPT Image execution is blocked until `OPENAI_API_KEY` is configured.
+- Complete-poster Image2 candidate generation is runnable locally.
+- Actual GPT Image execution requires `OPENAI_API_KEY` and, when using a
+  compatible gateway, `OPENAI_BASE_URL`.
 - OCR/QR/logo reconstruction is not yet implemented in this environment.
 
 Official OpenAI references:
