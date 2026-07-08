@@ -30,7 +30,17 @@ TOKENS_LIGHT = {
     "subtitle_fg": "#5C6370",
     "log_bg": "#14161A",
     "log_fg": "#D8DEE9",
+    "log_meta": "#6B7280",
+    "log_err": "#F28B82",
     "canvas_bg": "#2E3138",
+    "info_bg": "#E8F0FE",
+    "info_fg": "#1D4ED8",
+    "success_bg": "#E7F6EC",
+    "success_fg": "#1D7A38",
+    "warning_bg": "#FFF4E0",
+    "warning_fg": "#9A6700",
+    "error_bg": "#FDECEC",
+    "error_fg": "#C0392B",
 }
 
 TOKENS_DARK = {
@@ -47,7 +57,17 @@ TOKENS_DARK = {
     "subtitle_fg": "#9AA0AA",
     "log_bg": "#101215",
     "log_fg": "#C8CEDA",
+    "log_meta": "#7A8290",
+    "log_err": "#F49A93",
     "canvas_bg": "#26282D",
+    "info_bg": "rgba(91, 155, 248, 0.14)",
+    "info_fg": "#8AB8FA",
+    "success_bg": "rgba(46, 160, 67, 0.18)",
+    "success_fg": "#57C877",
+    "warning_bg": "rgba(210, 153, 34, 0.16)",
+    "warning_fg": "#E3B341",
+    "error_bg": "rgba(248, 81, 73, 0.16)",
+    "error_fg": "#F08080",
 }
 
 _MONO_FONTS = '"SF Mono", Menlo, Monaco, Consolas, "Courier New", monospace'
@@ -154,6 +174,30 @@ QGraphicsView#PreviewCanvas {
 QStatusBar {
     color: $subtitle_fg;
 }
+QWidget#InfoBanner {
+    border-radius: 6px;
+    border: 1px solid transparent;
+}
+QWidget#InfoBanner QLabel {
+    background: transparent;
+    font-size: 13px;
+}
+QWidget#InfoBanner QPushButton {
+    background: transparent;
+    border: none;
+    min-height: 20px;
+    padding: 2px 8px;
+    font-weight: 600;
+    text-decoration: underline;
+}
+QWidget#InfoBanner[kind="info"] { background: $info_bg; }
+QWidget#InfoBanner[kind="info"] QLabel, QWidget#InfoBanner[kind="info"] QPushButton { color: $info_fg; }
+QWidget#InfoBanner[kind="success"] { background: $success_bg; }
+QWidget#InfoBanner[kind="success"] QLabel, QWidget#InfoBanner[kind="success"] QPushButton { color: $success_fg; }
+QWidget#InfoBanner[kind="warning"] { background: $warning_bg; }
+QWidget#InfoBanner[kind="warning"] QLabel, QWidget#InfoBanner[kind="warning"] QPushButton { color: $warning_fg; }
+QWidget#InfoBanner[kind="error"] { background: $error_bg; }
+QWidget#InfoBanner[kind="error"] QLabel, QWidget#InfoBanner[kind="error"] QPushButton { color: $error_fg; }
 """
 )
 

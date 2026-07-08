@@ -56,6 +56,7 @@ jobs:
           app = create_application([])
           window = DashDesignQtApp()
           window.show()
+          window.batch_page.batch_input.setText(str(Path.cwd()))
           cmd, output_dir, env = window.build_batch_command()
           assert "--worker" in cmd, cmd
           assert "batch-style" in cmd, cmd

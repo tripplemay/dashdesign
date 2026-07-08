@@ -64,5 +64,17 @@ class QrPage(QWidget):
         )
 
     def input_preview_path(self) -> "Path | None":
+        if not self.qr_input.text():
+            return None
         path = Path(self.qr_input.text()).expanduser()
         return path if path.exists() else None
+
+    def save_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
+        settings.setValue("pages/qr/output_dir", self.qr_output.text())
+        settings.setValue("pages/qr/margin", self.qr_margin.text())
+        settings.setValue("pages/qr/radius", self.qr_radius.text())
+
+    def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
+        self.qr_output.setText(str(settings.value("pages/qr/output_dir", self.qr_output.text())))
+        self.qr_margin.setText(str(settings.value("pages/qr/margin", self.qr_margin.text())))
+        self.qr_radius.setText(str(settings.value("pages/qr/radius", self.qr_radius.text())))

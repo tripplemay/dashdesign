@@ -18,12 +18,14 @@ class PathField(QWidget):
         parent: "QWidget | None" = None,
     ) -> None:
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self.mode = mode
         self.label = QLabel(label)
         self.label.setMinimumWidth(92)
         self.label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.edit = QLineEdit(value)
         self.edit.setPlaceholderText(placeholder)
+        self.edit.setAcceptDrops(False)
         self.button = QPushButton("选择")
         self.button.clicked.connect(self.choose)
 
@@ -53,3 +55,25 @@ class PathField(QWidget):
             )
         if selected:
             self.setText(selected)
+
+    def dragEnterEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dropEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        urls = event.mimeData().urls()
+        if not urls:
+            return
+        from pathlib import Path
+
+        dropped = Path(urls[0].toLocalFile())
+        if not str(dropped):
+            return
+        if self.mode == "dir":
+            self.setText(str(dropped if dropped.is_dir() else dropped.parent))
+        else:
+            if dropped.is_file():
+                self.setText(str(dropped))
+        event.acceptProposedAction()

@@ -1,6 +1,7 @@
 """Reusable widgets for the DashDesign desktop client."""
 
 from ui.widgets.image_preview import ImagePreview
+from ui.widgets.info_bar import InfoBanner
 from ui.widgets.path_field import PathField
 
-__all__ = ["ImagePreview", "PathField"]
+__all__ = ["ImagePreview", "InfoBanner", "PathField"]

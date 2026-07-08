@@ -273,3 +273,58 @@ class TextImagePage(QWidget):
 
     def input_preview_path(self) -> "Path | None":
         return None
+
+    def save_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
+        settings.setValue("pages/t2i/output_dir", self.t2i_output.text())
+        settings.setValue("pages/t2i/mode", str(self.t2i_mode.currentData()))
+        settings.setValue("pages/t2i/text_style", str(self.t2i_text_style.currentData()))
+        settings.setValue("pages/t2i/purpose_template", str(self.t2i_purpose_template.currentData()))
+        settings.setValue("pages/t2i/style_template", str(self.t2i_style_template.currentData()))
+        settings.setValue("pages/t2i/layout_template", str(self.t2i_layout_template.currentData()))
+        settings.setValue("pages/t2i/text_density", str(self.t2i_text_density.currentData()))
+        settings.setValue("pages/t2i/candidates", self.t2i_candidates.text())
+        settings.setValue("pages/t2i/width_cm", self.t2i_width_cm.text())
+        settings.setValue("pages/t2i/height_cm", self.t2i_height_cm.text())
+        settings.setValue("pages/t2i/dpi", self.t2i_dpi.text())
+        settings.setValue("pages/t2i/image_size", self.t2i_image_size.currentText())
+        settings.setValue("pages/t2i/quality", self.t2i_quality.currentText())
+        settings.setValue("pages/t2i/postprocess", self.t2i_postprocess.isChecked())
+        settings.setValue("pages/t2i/base_url", self.t2i_base_url.text())
+        # 提示词/文案/API Key/立即调用 属于单次运行输入，刻意不持久化。
+
+    def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
+        self.t2i_output.setText(str(settings.value("pages/t2i/output_dir", self.t2i_output.text())))
+        for combo, key in (
+            (self.t2i_mode, "pages/t2i/mode"),
+            (self.t2i_text_style, "pages/t2i/text_style"),
+            (self.t2i_purpose_template, "pages/t2i/purpose_template"),
+            (self.t2i_style_template, "pages/t2i/style_template"),
+            (self.t2i_layout_template, "pages/t2i/layout_template"),
+            (self.t2i_text_density, "pages/t2i/text_density"),
+        ):
+            value = settings.value(key)
+            if value is not None:
+                index = combo.findData(str(value))
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+        for edit, key in (
+            (self.t2i_candidates, "pages/t2i/candidates"),
+            (self.t2i_width_cm, "pages/t2i/width_cm"),
+            (self.t2i_height_cm, "pages/t2i/height_cm"),
+            (self.t2i_dpi, "pages/t2i/dpi"),
+            (self.t2i_base_url, "pages/t2i/base_url"),
+        ):
+            value = settings.value(key)
+            if value is not None:
+                edit.setText(str(value))
+        for combo, key in (
+            (self.t2i_image_size, "pages/t2i/image_size"),
+            (self.t2i_quality, "pages/t2i/quality"),
+        ):
+            value = settings.value(key)
+            if value is not None:
+                index = combo.findText(str(value))
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+        self.t2i_postprocess.setChecked(settings.value("pages/t2i/postprocess", True, type=bool))
+        self.sync_text_image_mode()

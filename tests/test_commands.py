@@ -163,6 +163,10 @@ class TestBatchCommand:
         with pytest.raises(ValueError, match="输入目录不存在"):
             build_batch_command(self.batch_form(tmp_path, input_dir=str(tmp_path / "nope")))
 
+    def test_empty_input_dir_rejected(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="请选择输入目录"):
+            build_batch_command(self.batch_form(tmp_path, input_dir="  "))
+
     def test_empty_dpi_rejected(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="DPI"):
             build_batch_command(self.batch_form(tmp_path, dpi="  "))

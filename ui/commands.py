@@ -146,6 +146,8 @@ class BatchForm:
 
 
 def build_batch_command(form: BatchForm):
+    if not form.input_dir.strip():
+        raise ValueError("请选择输入目录")
     input_dir = Path(form.input_dir).expanduser()
     output_dir = Path(form.output_dir).expanduser()
     if not input_dir.exists():

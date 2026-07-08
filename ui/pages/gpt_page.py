@@ -80,5 +80,23 @@ class GptPage(QWidget):
         )
 
     def input_preview_path(self) -> "Path | None":
+        if not self.gpt_source.text():
+            return None
         path = Path(self.gpt_source.text()).expanduser()
         return path if path.exists() else None
+
+    def save_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
+        settings.setValue("pages/gpt/output_dir", self.gpt_output.text())
+        settings.setValue("pages/gpt/mode", self.gpt_mode.currentText())
+        settings.setValue("pages/gpt/dpi", self.gpt_dpi.text())
+        settings.setValue("pages/gpt/base_url", self.gpt_base_url.text())
+
+    def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
+        self.gpt_output.setText(str(settings.value("pages/gpt/output_dir", self.gpt_output.text())))
+        mode = settings.value("pages/gpt/mode")
+        if mode is not None:
+            index = self.gpt_mode.findText(str(mode))
+            if index >= 0:
+                self.gpt_mode.setCurrentIndex(index)
+        self.gpt_dpi.setText(str(settings.value("pages/gpt/dpi", self.gpt_dpi.text())))
+        self.gpt_base_url.setText(str(settings.value("pages/gpt/base_url", self.gpt_base_url.text())))
