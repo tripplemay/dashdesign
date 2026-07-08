@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QImageReader, QPainter, QPixmap
-from PySide6.QtWidgets import QFrame, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QWidget
+from PySide6.QtCore import QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QBrush, QColor, QImageReader, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import (
+    QFrame,
+    QGraphicsPixmapItem,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QWidget,
+)
 
 # 超过约 3000 万像素的图先降采样到 6000px 内再进预览，避免 9000px 级
 # 印刷大图整幅解码导致切页卡顿；预览质量不受影响（屏幕远小于 6000px）。
@@ -19,6 +26,8 @@ _MAX_ZOOM = 12.0
 
 class ImagePreview(QGraphicsView):
     pathDropped = Signal(str)
+    # 框选完成信号：矩形坐标基于原图像素（预览可能是降采样图，已换算回原尺寸）。
+    selectionMade = Signal(QRect, QSize)
 
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
@@ -27,6 +36,10 @@ class ImagePreview(QGraphicsView):
         self.setScene(self.scene)
         self.pixmap_item: "QGraphicsPixmapItem | None" = None
         self.zoom_level = 1.0
+        self._source_size = QSize()
+        self._selection_mode = False
+        self._selection_item: "QGraphicsRectItem | None" = None
+        self._selection_origin = None
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setRenderHints(
             QPainter.RenderHint.SmoothPixmapTransform | QPainter.RenderHint.Antialiasing
@@ -47,6 +60,9 @@ class ImagePreview(QGraphicsView):
             return False
         pixmap = QPixmap.fromImage(image)
         self.scene.clear()
+        self._selection_item = None
+        self._selection_origin = None
+        self._source_size = size if size.isValid() else pixmap.size()
         self.pixmap_item = QGraphicsPixmapItem(pixmap)
         self.pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
         self.scene.addItem(self.pixmap_item)
@@ -58,8 +74,82 @@ class ImagePreview(QGraphicsView):
     def clear_image(self) -> None:
         self.scene.clear()
         self.pixmap_item = None
+        self._selection_item = None
+        self._selection_origin = None
+        self._source_size = QSize()
         self.zoom_level = 1.0
         self.resetTransform()
+
+    def source_size(self) -> QSize:
+        return QSize(self._source_size)
+
+    def set_selection_mode(self, enabled: bool) -> None:
+        self._selection_mode = enabled
+        if enabled:
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+            self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+        else:
+            self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+            self.viewport().unsetCursor()
+            # 保留已画的框，让用户对照坐标；下次加载图片时才清除。
+
+    def clear_selection(self) -> None:
+        if self._selection_item is not None and self._selection_item.scene() is not None:
+            self.scene.removeItem(self._selection_item)
+        self._selection_item = None
+        self._selection_origin = None
+
+    def _ensure_selection_item(self) -> QGraphicsRectItem:
+        if self._selection_item is None or self._selection_item.scene() is None:
+            item = QGraphicsRectItem()
+            pen = QPen(QColor(224, 62, 62), 0)
+            pen.setStyle(Qt.PenStyle.DashLine)
+            item.setPen(pen)
+            item.setBrush(QBrush(QColor(224, 62, 62, 60)))
+            item.setZValue(10)
+            self.scene.addItem(item)
+            self._selection_item = item
+        return self._selection_item
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self._selection_mode and self.pixmap_item is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._selection_origin = self.mapToScene(event.position().toPoint())
+            item = self._ensure_selection_item()
+            item.setRect(QRectF(self._selection_origin, self._selection_origin))
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self._selection_mode and self._selection_origin is not None:
+            current = self.mapToScene(event.position().toPoint())
+            item = self._ensure_selection_item()
+            item.setRect(QRectF(self._selection_origin, current).normalized())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self._selection_mode and self._selection_origin is not None and self.pixmap_item is not None:
+            rect = QRectF(
+                self._selection_origin, self.mapToScene(event.position().toPoint())
+            ).normalized()
+            self._selection_origin = None
+            bounded = rect.intersected(self.pixmap_item.boundingRect())
+            if bounded.width() >= 2 and bounded.height() >= 2:
+                pixmap_size = self.pixmap_item.pixmap().size()
+                scale_x = self._source_size.width() / pixmap_size.width() if pixmap_size.width() else 1.0
+                scale_y = self._source_size.height() / pixmap_size.height() if pixmap_size.height() else 1.0
+                original = QRect(
+                    round(bounded.left() * scale_x),
+                    round(bounded.top() * scale_y),
+                    round(bounded.width() * scale_x),
+                    round(bounded.height() * scale_y),
+                )
+                self.selectionMade.emit(original, QSize(self._source_size))
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def fit_image(self) -> None:
         if self.pixmap_item is None:

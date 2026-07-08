@@ -11,14 +11,20 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QRadioButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from app_runtime import PROJECT_ROOT, first_image
+from app_runtime import PROJECT_ROOT, first_image, runtime_tool_path
 from ui.commands import BatchForm
 from ui.widgets import PathField
+
+# 与 scripts/prepare_print_assets.py 的 discover_sources 保持一致：
+# 批量脚本只处理这三种扩展名，其余会被静默跳过。
+_SCRIPT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 
 class BatchPage(QWidget):
@@ -39,43 +45,114 @@ class BatchPage(QWidget):
         self.batch_output = PathField("输出目录", str(PROJECT_ROOT / "print_ready_desktop_qt"), "dir")
         path_layout.addWidget(self.batch_input)
         path_layout.addWidget(self.batch_output)
+        hint = QLabel("仅处理 jpg/jpeg/png；物理尺寸从文件名解析（如“200乘以80”= 200cm×80cm），请勿改名。")
+        hint.setObjectName("Subtitle")
+        hint.setWordWrap(True)
+        path_layout.addWidget(hint)
         layout.addWidget(paths)
 
         workflow = QGroupBox("处理方式")
         workflow_layout = QVBoxLayout(workflow)
         self.workflow_group = QButtonGroup(self)
         self.style_radio = QRadioButton("保留原字效高清化（Real-ESRGAN，推荐）")
+        self.style_radio.setToolTip(
+            "先用 Real-ESRGAN x4 超分再归一化到目标尺寸，字效和插画边缘最好；\n"
+            "源图较大（>5M 像素或最长边 >4300 或 DPI≥160）时自动回退基础输出。速度较慢。"
+        )
         self.pil_radio = QRadioButton("基础 200dpi 输出（PIL/Lanczos，稳定兜底）")
+        self.pil_radio.setToolTip("纯 PIL/Lanczos 缩放，速度快、结果稳定；适合已经足够清晰的源图。")
         self.style_radio.setChecked(True)
         self.workflow_group.addButton(self.style_radio)
         self.workflow_group.addButton(self.pil_radio)
         workflow_layout.addWidget(self.style_radio)
         workflow_layout.addWidget(self.pil_radio)
+        self.tool_status = QLabel("")
+        self.tool_status.setObjectName("Subtitle")
+        self.tool_status.setWordWrap(True)
+        workflow_layout.addWidget(self.tool_status)
+        self._refresh_tool_status()
         layout.addWidget(workflow)
 
         options = QGroupBox("参数")
         option_layout = QGridLayout(options)
-        self.batch_dpi = QLineEdit("200")
+        self.batch_dpi = QSpinBox()
+        self.batch_dpi.setRange(30, 600)
+        self.batch_dpi.setValue(200)
+        self.batch_dpi.setToolTip("印刷输出分辨率：写真/展架常用 200，大幅喷绘可用 150。")
         self.batch_only = QLineEdit()
-        self.batch_only.setPlaceholderText("可选：只处理某个文件名")
+        self.batch_only.setPlaceholderText("可选：只处理某个文件名（精确匹配，含扩展名）")
         self.batch_force = QCheckBox("覆盖/强制重新生成")
+        self.batch_force.setToolTip("勾选后即使输出目录已有同名成品也会重新生成并覆盖。")
         self.batch_keep_masters = QCheckBox("保留 Real-ESRGAN 中间 master")
+        self.batch_keep_masters.setToolTip("保留超分后的中间 PNG（_masters/ 目录），便于排查画质问题，占用较多磁盘。")
         option_layout.addWidget(QLabel("DPI"), 0, 0)
         option_layout.addWidget(self.batch_dpi, 0, 1)
         option_layout.addWidget(QLabel("只处理文件"), 1, 0)
         option_layout.addWidget(self.batch_only, 1, 1)
+        option_layout.addWidget(QLabel("选项"), 2, 0)
         option_layout.addWidget(self.batch_force, 2, 1)
         option_layout.addWidget(self.batch_keep_masters, 3, 1)
         option_layout.setColumnStretch(1, 1)
         layout.addWidget(options)
         layout.addStretch(1)
 
+    def _refresh_tool_status(self) -> None:
+        if runtime_tool_path().exists():
+            self.tool_status.setText("")
+            self.tool_status.hide()
+        else:
+            self.tool_status.setText(
+                "⚠ 未找到 Real-ESRGAN 二进制（tools/realesrgan-ncnn-vulkan）。"
+                "请先运行 scripts/bootstrap_runtime_assets.sh，或改用基础输出。"
+            )
+            self.tool_status.show()
+
+    def _count_images(self) -> int:
+        input_dir = Path(self.batch_input.text()).expanduser()
+        only = self.batch_only.text().strip()
+        if only:
+            return 1 if (input_dir / only).exists() else 0
+        if not input_dir.is_dir():
+            return 0
+        return sum(
+            1
+            for path in input_dir.iterdir()
+            if path.is_file() and path.suffix.lower() in _SCRIPT_IMAGE_EXTENSIONS
+        )
+
+    def confirm_run(self, window) -> bool:  # type: ignore[no-untyped-def]
+        self._refresh_tool_status()
+        if self.style_radio.isChecked() and not runtime_tool_path().exists():
+            window.banner.show_message(
+                "error",
+                "未找到 Real-ESRGAN 二进制，无法使用“保留原字效高清化”。"
+                "请先运行 scripts/bootstrap_runtime_assets.sh，或切换为基础输出。",
+            )
+            return False
+        count = self._count_images()
+        if count == 0:
+            window.banner.show_message(
+                "error", "输入目录中没有可处理的图片（仅支持 jpg/jpeg/png，或“只处理文件”不存在）。"
+            )
+            return False
+        message = f"将处理 {count} 张图片，输出到：\n{self.batch_output.text()}"
+        if self.batch_force.isChecked():
+            message += "\n\n已勾选“覆盖/强制重新生成”，已有输出将被覆盖。"
+        reply = QMessageBox.question(
+            window,
+            "确认批量处理",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
     def form(self) -> BatchForm:
         return BatchForm(
             input_dir=self.batch_input.text(),
             output_dir=self.batch_output.text(),
             style_mode=self.style_radio.isChecked(),
-            dpi=self.batch_dpi.text(),
+            dpi=str(self.batch_dpi.value()),
             only=self.batch_only.text(),
             force=self.batch_force.isChecked(),
             keep_masters=self.batch_keep_masters.isChecked(),
@@ -95,7 +172,7 @@ class BatchPage(QWidget):
         settings.setValue("pages/batch/input_dir", self.batch_input.text())
         settings.setValue("pages/batch/output_dir", self.batch_output.text())
         settings.setValue("pages/batch/style_mode", self.style_radio.isChecked())
-        settings.setValue("pages/batch/dpi", self.batch_dpi.text())
+        settings.setValue("pages/batch/dpi", self.batch_dpi.value())
         settings.setValue("pages/batch/force", self.batch_force.isChecked())
         settings.setValue("pages/batch/keep_masters", self.batch_keep_masters.isChecked())
 
@@ -106,7 +183,7 @@ class BatchPage(QWidget):
             self.style_radio.setChecked(True)
         else:
             self.pil_radio.setChecked(True)
-        self.batch_dpi.setText(str(settings.value("pages/batch/dpi", self.batch_dpi.text())))
+        self.batch_dpi.setValue(settings.value("pages/batch/dpi", self.batch_dpi.value(), type=int))
         self.batch_force.setChecked(settings.value("pages/batch/force", False, type=bool))
         self.batch_keep_masters.setChecked(
             settings.value("pages/batch/keep_masters", False, type=bool)

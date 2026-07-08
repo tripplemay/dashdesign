@@ -208,6 +208,13 @@ class DashDesignQtApp(QMainWindow):
         # CI 冒烟测试通过 window.t2i_prompt 填写提示词，保持该属性可用。
         self.t2i_prompt = self.text_image_page.t2i_prompt
 
+        # 源路径变化时自动刷新预览（仅当对应页面处于前台）。
+        self.batch_page.batch_input.edit.textChanged.connect(lambda: self._preview_if_current(2))
+        self.batch_page.batch_only.textChanged.connect(lambda: self._preview_if_current(2))
+        self.gpt_page.gpt_source.edit.textChanged.connect(lambda: self._preview_if_current(3))
+        self.qr_page.qr_input.edit.textChanged.connect(lambda: self._preview_if_current(4))
+        self.qr_page.select_button.toggled.connect(self._on_qr_select_toggled)
+
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.stack = QStackedWidget()
         for page in self.pages:
@@ -326,6 +333,7 @@ class DashDesignQtApp(QMainWindow):
         self.preview = ImagePreview()
         self.preview.setObjectName("PreviewCanvas")
         self.preview.pathDropped.connect(self.handle_dropped_path)
+        self.preview.selectionMade.connect(self._on_preview_selection)
         layout.addWidget(self.preview, 1)
 
         tools = QHBoxLayout()
@@ -356,8 +364,36 @@ class DashDesignQtApp(QMainWindow):
         title, subtitle = titles[row]
         self.title_label.setText(title)
         self.subtitle_label.setText(subtitle)
+        if row != 4 and self.qr_page.select_button.isChecked():
+            self.qr_page.select_button.setChecked(False)
         self._update_run_controls()
         self.preview_input()
+
+    def _preview_if_current(self, row: int) -> None:
+        if self.nav.currentRow() == row:
+            self.preview_input()
+
+    def _on_qr_select_toggled(self, checked: bool) -> None:
+        if checked:
+            if self.preview.pixmap_item is None:
+                self.preview_input()
+            if self.preview.pixmap_item is None:
+                self.banner.show_message("warning", "请先选择输入图片，再在预览上框选。", timeout_ms=4000)
+                self.qr_page.select_button.setChecked(False)
+                return
+        self.preview.set_selection_mode(checked)
+
+    def _on_preview_selection(self, rect, size) -> None:  # type: ignore[no-untyped-def]
+        if self.nav.currentRow() != 4:
+            return
+        self.qr_page.apply_selection(rect, size)
+        self.qr_page.select_button.setChecked(False)
+        self.banner.show_message(
+            "success",
+            f"已框选清除区域：{rect.x()},{rect.y()} ~ {rect.x() + rect.width()},{rect.y() + rect.height()}"
+            f"（参考尺寸 {size.width()}x{size.height()}）",
+            timeout_ms=4000,
+        )
 
     def append_log(self, text: str, kind: str = "out") -> None:
         tokens = theme.current_tokens()
@@ -420,11 +456,17 @@ class DashDesignQtApp(QMainWindow):
         if self.process is not None:
             self.banner.show_message("info", "已有工作流正在运行，请先停止或等待完成。", timeout_ms=4000)
             return
+        current_page = self.pages[self.nav.currentRow()] if self.nav.currentRow() >= 0 else None
         try:
             command, output_dir, env_updates = self.build_current_command()
         except ValueError as exc:
             self.banner.show_message("error", f"参数错误：{exc}")
+            if current_page is not None and hasattr(current_page, "on_validation_error"):
+                current_page.on_validation_error()
             return
+        if current_page is not None and hasattr(current_page, "confirm_run"):
+            if not current_page.confirm_run(self):
+                return
 
         self.banner.dismiss()
         self._stderr_tail.clear()

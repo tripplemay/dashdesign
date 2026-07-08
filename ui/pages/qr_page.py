@@ -1,14 +1,18 @@
-"""QR-code area removal page."""
+"""QR-code area removal page with on-preview rectangle selection."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import QRect, QSize
 from PySide6.QtWidgets import (
+    QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
     QLabel,
     QLineEdit,
+    QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -27,7 +31,7 @@ class QrPage(QWidget):
 
         paths = QGroupBox("输入输出")
         path_layout = QVBoxLayout(paths)
-        self.qr_input = PathField("输入图片", "", "file")
+        self.qr_input = PathField("输入图片", "", "file", placeholder="拖入或选择需要清除二维码的图片")
         self.qr_output = PathField("输出目录", str(PROJECT_ROOT / "single_no_qr_desktop_qt"), "dir")
         path_layout.addWidget(self.qr_input)
         path_layout.addWidget(self.qr_output)
@@ -35,23 +39,49 @@ class QrPage(QWidget):
 
         params = QGroupBox("清除区域")
         params_layout = QGridLayout(params)
+        self.select_button = QPushButton("在预览图上框选")
+        self.select_button.setCheckable(True)
+        self.select_button.setToolTip("点击后在右侧预览图上按住左键拖出矩形，松开自动回填坐标。")
+        params_layout.addWidget(self.select_button, 0, 1)
+        select_hint = QLabel("框选后自动填入坐标和参考尺寸；也可以手工输入像素坐标。")
+        select_hint.setObjectName("Subtitle")
+        select_hint.setWordWrap(True)
+        params_layout.addWidget(select_hint, 1, 1)
+
         self.qr_box = QLineEdit()
-        self.qr_box.setPlaceholderText("x1,y1,x2,y2")
+        self.qr_box.setPlaceholderText("x1,y1,x2,y2（原图像素坐标）")
         self.qr_reference_size = QLineEdit()
-        self.qr_reference_size.setPlaceholderText("可选：如 3238x1295")
-        self.qr_margin = QLineEdit("0.55")
-        self.qr_radius = QLineEdit("21")
-        params_layout.addWidget(QLabel("区域"), 0, 0)
-        params_layout.addWidget(self.qr_box, 0, 1)
-        params_layout.addWidget(QLabel("参考尺寸"), 1, 0)
-        params_layout.addWidget(self.qr_reference_size, 1, 1)
-        params_layout.addWidget(QLabel("边界比例"), 2, 0)
-        params_layout.addWidget(self.qr_margin, 2, 1)
-        params_layout.addWidget(QLabel("修补半径"), 3, 0)
-        params_layout.addWidget(self.qr_radius, 3, 1)
+        self.qr_reference_size.setPlaceholderText("可选：坐标参考的图片尺寸，如 3238x1295")
+        self.qr_reference_size.setToolTip(
+            "当坐标来自另一张分辨率不同的参考图时填写；脚本会按比例换算到实际图片。\n框选时会自动填入当前图片的尺寸。"
+        )
+        self.qr_margin = QDoubleSpinBox()
+        self.qr_margin.setRange(0.0, 2.0)
+        self.qr_margin.setSingleStep(0.05)
+        self.qr_margin.setDecimals(2)
+        self.qr_margin.setValue(0.55)
+        self.qr_margin.setToolTip("向外扩大清除范围的比例：0.55 表示每边各多清除 55% 的框宽/高，用于盖住二维码周围的留白和文字。")
+        self.qr_radius = QSpinBox()
+        self.qr_radius.setRange(1, 64)
+        self.qr_radius.setValue(21)
+        self.qr_radius.setToolTip("OpenCV 修补（inpaint）半径：越大过渡越平滑，太大会发糊。")
+        params_layout.addWidget(QLabel("区域"), 2, 0)
+        params_layout.addWidget(self.qr_box, 2, 1)
+        params_layout.addWidget(QLabel("参考尺寸"), 3, 0)
+        params_layout.addWidget(self.qr_reference_size, 3, 1)
+        params_layout.addWidget(QLabel("边界比例"), 4, 0)
+        params_layout.addWidget(self.qr_margin, 4, 1)
+        params_layout.addWidget(QLabel("修补半径"), 5, 0)
+        params_layout.addWidget(self.qr_radius, 5, 1)
         params_layout.setColumnStretch(1, 1)
         layout.addWidget(params)
         layout.addStretch(1)
+
+    def apply_selection(self, rect: QRect, source_size: QSize) -> None:
+        self.qr_box.setText(
+            f"{rect.x()},{rect.y()},{rect.x() + rect.width()},{rect.y() + rect.height()}"
+        )
+        self.qr_reference_size.setText(f"{source_size.width()}x{source_size.height()}")
 
     def form(self) -> QrForm:
         return QrForm(
@@ -59,8 +89,8 @@ class QrPage(QWidget):
             output_dir=self.qr_output.text(),
             box=self.qr_box.text(),
             reference_size=self.qr_reference_size.text(),
-            margin=self.qr_margin.text(),
-            radius=self.qr_radius.text(),
+            margin=str(self.qr_margin.value()),
+            radius=str(self.qr_radius.value()),
         )
 
     def input_preview_path(self) -> "Path | None":
@@ -71,10 +101,10 @@ class QrPage(QWidget):
 
     def save_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
         settings.setValue("pages/qr/output_dir", self.qr_output.text())
-        settings.setValue("pages/qr/margin", self.qr_margin.text())
-        settings.setValue("pages/qr/radius", self.qr_radius.text())
+        settings.setValue("pages/qr/margin", self.qr_margin.value())
+        settings.setValue("pages/qr/radius", self.qr_radius.value())
 
     def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
         self.qr_output.setText(str(settings.value("pages/qr/output_dir", self.qr_output.text())))
-        self.qr_margin.setText(str(settings.value("pages/qr/margin", self.qr_margin.text())))
-        self.qr_radius.setText(str(settings.value("pages/qr/radius", self.qr_radius.text())))
+        self.qr_margin.setValue(settings.value("pages/qr/margin", self.qr_margin.value(), type=float))
+        self.qr_radius.setValue(settings.value("pages/qr/radius", self.qr_radius.value(), type=int))

@@ -8,6 +8,7 @@ validation and CLI-assembly logic unit-testable.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -236,6 +237,10 @@ class QrForm:
     radius: str
 
 
+_BOX_PATTERN = re.compile(r"\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*")
+_SIZE_PATTERN = re.compile(r"\s*\d+\s*x\s*\d+\s*", re.IGNORECASE)
+
+
 def build_qr_command(form: QrForm):
     source = Path(form.source).expanduser()
     output_dir = Path(form.output_dir).expanduser()
@@ -243,7 +248,16 @@ def build_qr_command(form: QrForm):
         raise ValueError("输入图片不存在")
     box = form.box.strip()
     if not box:
-        raise ValueError("请填写清除区域 x1,y1,x2,y2")
+        raise ValueError("请填写清除区域 x1,y1,x2,y2（可在预览图上框选）")
+    match = _BOX_PATTERN.fullmatch(box)
+    if match is None:
+        raise ValueError("清除区域格式应为四个非负整数：x1,y1,x2,y2")
+    x1, y1, x2, y2 = (int(value) for value in match.groups())
+    if x2 <= x1 or y2 <= y1:
+        raise ValueError("清除区域无效：需要 x2 > x1 且 y2 > y1")
+    box = f"{x1},{y1},{x2},{y2}"
+    if form.reference_size.strip() and _SIZE_PATTERN.fullmatch(form.reference_size) is None:
+        raise ValueError("参考尺寸格式应为 宽x高，如 3238x1295")
     command = [
         *worker_prefix(),
         "qr",

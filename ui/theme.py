@@ -198,6 +198,30 @@ QWidget#InfoBanner[kind="warning"] { background: $warning_bg; }
 QWidget#InfoBanner[kind="warning"] QLabel, QWidget#InfoBanner[kind="warning"] QPushButton { color: $warning_fg; }
 QWidget#InfoBanner[kind="error"] { background: $error_bg; }
 QWidget#InfoBanner[kind="error"] QLabel, QWidget#InfoBanner[kind="error"] QPushButton { color: $error_fg; }
+QLabel[chip="blocked"] {
+    background: $error_bg;
+    color: $error_fg;
+    border-radius: 10px;
+    padding: 3px 10px;
+    font-size: 12px;
+}
+QLabel[chip="negative"] {
+    background: $warning_bg;
+    color: $warning_fg;
+    border-radius: 10px;
+    padding: 3px 10px;
+    font-size: 12px;
+}
+QLabel[chip="neutral"] {
+    background: $sidebar_item_selected_bg;
+    color: $sidebar_item_selected_fg;
+    border-radius: 10px;
+    padding: 3px 10px;
+    font-size: 12px;
+}
+QPlainTextEdit[invalid="true"], QLineEdit[invalid="true"] {
+    border: 1px solid $error_fg;
+}
 """
 )
 

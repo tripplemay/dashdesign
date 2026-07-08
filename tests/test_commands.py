@@ -252,6 +252,32 @@ class TestQrCommand:
         with pytest.raises(ValueError, match="清除区域"):
             build_qr_command(self.qr_form(source, box=" "))
 
+    def test_malformed_box_rejected(self, tmp_path: Path) -> None:
+        source = tmp_path / "poster.jpg"
+        source.write_bytes(b"fake")
+        with pytest.raises(ValueError, match="x1,y1,x2,y2"):
+            build_qr_command(self.qr_form(source, box="a,b,c,d"))
+        with pytest.raises(ValueError, match="x1,y1,x2,y2"):
+            build_qr_command(self.qr_form(source, box="1,2,3"))
+
+    def test_inverted_box_rejected(self, tmp_path: Path) -> None:
+        source = tmp_path / "poster.jpg"
+        source.write_bytes(b"fake")
+        with pytest.raises(ValueError, match="x2 > x1"):
+            build_qr_command(self.qr_form(source, box="300,200,100,400"))
+
+    def test_malformed_reference_size_rejected(self, tmp_path: Path) -> None:
+        source = tmp_path / "poster.jpg"
+        source.write_bytes(b"fake")
+        with pytest.raises(ValueError, match="参考尺寸"):
+            build_qr_command(self.qr_form(source, reference_size="宽1295"))
+
+    def test_box_with_spaces_normalized(self, tmp_path: Path) -> None:
+        source = tmp_path / "poster.jpg"
+        source.write_bytes(b"fake")
+        command, _, _ = build_qr_command(self.qr_form(source, box=" 100, 200, 300, 400 "))
+        assert command[command.index("--box") + 1] == "100,200,300,400"
+
     def test_reference_size_forwarded(self, tmp_path: Path) -> None:
         source = tmp_path / "poster.jpg"
         source.write_bytes(b"fake")
