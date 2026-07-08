@@ -185,6 +185,23 @@ class TestModel:
         assert model.done_label == "/tmp/out"
         assert all(s.status == OK for s in model.stages)
 
+    def test_mark_failed_marks_running_stage_fail(self) -> None:
+        model = ProgressModel()
+        self._feed(model, '##DASH_PROGRESS## {"kind":"plan","labels":["A","B","C"]}')
+        self._feed(model, '##DASH_PROGRESS## {"kind":"stage","i":2}')
+        model.mark_failed()
+        assert model.stages[0].status == OK  # 已完成的保持完成
+        assert model.stages[1].status == FAIL  # 进行中的变失败
+        assert model.stages[2].status == PENDING  # 后续保持待办
+        assert model.step_failed
+
+    def test_mark_all_ok_completes_pending_and_running(self) -> None:
+        model = ProgressModel()
+        self._feed(model, '##DASH_PROGRESS## {"kind":"plan","labels":["A","B","C"]}')
+        self._feed(model, '##DASH_PROGRESS## {"kind":"stage","i":2}')
+        model.mark_all_ok()
+        assert all(s.status == OK for s in model.stages)
+
     def test_skip_state_terminal(self) -> None:
         model = ProgressModel()
         self._feed(model, '##DASH_PROGRESS## {"kind":"plan","labels":["处理"]}')

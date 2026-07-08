@@ -104,6 +104,7 @@ class ProgressPanel(QGroupBox):
     def reset(self) -> None:
         self.bar.setRange(0, 0)  # busy
         self.status_label.setText("正在启动…")
+        self.status_label.setStyleSheet("")  # 清除上次失败留下的红色
         self.hint_label.setText("")
         self._clear_rows()
         self.show()
@@ -190,14 +191,26 @@ class ProgressPanel(QGroupBox):
         remaining = elapsed_seconds / done * (total - done)
         return "约 " + _fmt_duration(round(remaining))
 
-    def finalize(self, success: bool, elapsed_seconds: int) -> None:
+    def finalize(self, model: ProgressModel, success: bool, elapsed_seconds: int) -> None:
         colors = theme.current_tokens()
+        # 先把阶段状态收尾，再重绘阶段行，让失败所在阶段显示为失败而非"进行中"。
         if success:
-            self.bar.setRange(0, 1)
+            model.mark_all_ok()
+        else:
+            model.mark_failed()
+        self._ensure_rows([stage.label for stage in model.stages])
+        for row, stage in zip(self._rows, model.stages):
+            row.render(stage.label, stage.status, colors)
+
+        # 无论成败都把忙碌态进度条切成静态，停止无限滚动动画。
+        self.bar.setRange(0, 1)
+        if success:
             self.bar.setValue(1)
             self.status_label.setText(f"已完成 · 用时 {_fmt_duration(elapsed_seconds)}")
+            self.status_label.setStyleSheet("")
             self.hint_label.setText("")
         else:
+            self.bar.setValue(0)
             self.status_label.setText(f"运行失败 · 用时 {_fmt_duration(elapsed_seconds)}")
             self.status_label.setStyleSheet(f"color: {colors['error_fg']};")
             self.hint_label.setText("详情见失败提示；可用“文件 → 导出运行日志”保存完整输出以便排查。")

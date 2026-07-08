@@ -336,6 +336,12 @@ class DashDesignQtApp(QMainWindow):
         self.subtitle_label.setText(subtitle)
         if row != 4 and self.qr_page.select_button.isChecked():
             self.qr_page.select_button.setChecked(False)
+        # 进度与提示都属于"上一次运行/上一个页面"，切换页面时清掉，
+        # 避免在新工作流页面残留其他工作流的进度或提示。运行中不清（进度仍在进行）。
+        if not self._running:
+            self.progress_panel.hide()
+            self.banner.dismiss()
+            self.statusBar().showMessage("就绪")
         self._update_run_controls()
         self.preview_input()
 
@@ -467,7 +473,7 @@ class DashDesignQtApp(QMainWindow):
             return
         self._capture("[错误] 工作流进程启动失败：找不到可执行文件或没有执行权限。")
         self.statusBar().showMessage("启动失败")
-        self.progress_panel.finalize(False, self._elapsed_seconds())
+        self.progress_panel.finalize(self._progress, False, self._elapsed_seconds())
         self.banner.show_message(
             "error", "工作流进程启动失败：找不到可执行文件或没有执行权限，请检查安装是否完整。"
         )
@@ -525,9 +531,13 @@ class DashDesignQtApp(QMainWindow):
         elapsed = self._elapsed_text()
         self._capture(f"[完成] exit={exit_code} · 用时 {elapsed}")
         success = exit_code == 0
-        self.progress_panel.finalize(success, elapsed_seconds)
+        self.progress_panel.finalize(self._progress, success, elapsed_seconds)
         self._set_running(False)
+        process = self.process
         self.process = None
+        if process is not None:
+            # 与 process_error 分支一致：释放已结束的 QProcess，避免多次运行累积。
+            process.deleteLater()
         if success:
             self.statusBar().showMessage(f"完成 · 用时 {elapsed}")
             self.banner.show_message(
@@ -575,13 +585,16 @@ class DashDesignQtApp(QMainWindow):
     def build_qr_command(self):
         return commands.build_qr_command(self.qr_page.form())
 
+    def _clear_preview(self, message: str) -> None:
+        self.preview.clear_image()
+        self.preview_info_label.setText("")
+        self.current_preview_path = None
+        self.preview_path_label.setText(message)
+
     def preview_input(self) -> None:
         path = self.current_input_preview_path()
         if path is None:
-            self.preview_path_label.setText("没有可预览的输入图片")
-            self.preview_info_label.setText("")
-            self.preview.clear_image()
-            self.current_preview_path = None
+            self._clear_preview("没有可预览的输入图片")
             return
         self.load_preview(path)
 
@@ -593,20 +606,20 @@ class DashDesignQtApp(QMainWindow):
 
     def preview_recent_output(self) -> None:
         if self.last_output_dir is None:
-            self.preview_path_label.setText("还没有最近输出")
+            self._clear_preview("还没有最近输出")
             return
         path = first_output_image(self.last_output_dir)
         if path is None:
-            self.preview_path_label.setText(f"输出目录暂无可预览图片：{self.last_output_dir}")
+            self._clear_preview(f"输出目录暂无可预览图片：{self.last_output_dir}")
             return
         self.load_preview(path)
 
     def load_preview(self, path: Path) -> None:
         if not path.exists():
-            self.preview_path_label.setText(f"文件不存在：{path}")
+            self._clear_preview(f"文件不存在：{path}")
             return
         if not self.preview.load_image(path):
-            self.preview_path_label.setText(f"无法读取图片：{path}")
+            self._clear_preview(f"无法读取图片：{path}")
             return
         self.current_preview_path = path
         self.preview_path_label.setText(str(path))

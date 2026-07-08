@@ -117,6 +117,19 @@ class ProgressModel:
             if self.step_total:
                 self.step_done = self.step_total
 
+    def mark_all_ok(self) -> None:
+        """成功收尾：未完成的阶段全部标记为完成。"""
+        for stage in self.stages:
+            if stage.status in (PENDING, RUNNING):
+                stage.status = OK
+
+    def mark_failed(self) -> None:
+        """失败收尾：把正在进行的阶段标记为失败（其后阶段保持待办）。"""
+        for stage in self.stages:
+            if stage.status == RUNNING:
+                stage.status = FAIL
+        self.step_failed = True
+
     def _reset_steps(self) -> None:
         self.step_total = 0
         self.step_done = 0
