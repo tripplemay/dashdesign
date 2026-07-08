@@ -226,6 +226,8 @@ class DashDesignQtApp(QMainWindow):
         self.gpt_page.gpt_source.edit.textChanged.connect(lambda: self._preview_if_current(3))
         self.qr_page.qr_input.edit.textChanged.connect(lambda: self._preview_if_current(4))
         self.qr_page.select_button.toggled.connect(self._on_qr_select_toggled)
+        # 切换/发布项目后，文生图页的活跃基线标签需刷新。
+        self.baseline_page.projectChanged.connect(self.text_image_page.refresh_active_baseline)
 
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.stack = QStackedWidget()
@@ -349,6 +351,10 @@ class DashDesignQtApp(QMainWindow):
         self.subtitle_label.setText(subtitle)
         if row != 4 and self.qr_page.select_button.isChecked():
             self.qr_page.select_button.setChecked(False)
+        if row == 0:
+            self.baseline_page.reload()
+        elif row == 1:
+            self.text_image_page.refresh_active_baseline()
         # 进度与提示都属于"上一次运行/上一个页面"，切换页面时清掉，
         # 避免在新工作流页面残留其他工作流的进度或提示。运行中不清（进度仍在进行）。
         if not self._running:
