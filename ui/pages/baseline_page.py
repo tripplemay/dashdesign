@@ -37,7 +37,7 @@ from baseline.store import today_str
 from ui import api_config, baseline_service
 from ui.merge_job import MergeSignals, run_merge_job
 from ui.utils import open_path
-from ui.widgets import FlowLayout, MergeReviewDialog, SettingsDialog
+from ui.widgets import FlowLayout, MergeReviewDialog, NewProjectDialog, SettingsDialog
 
 _STATUS_LABELS = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
 _AUDIENCE_LABELS = {
@@ -63,10 +63,14 @@ class BaselinePage(QWidget):
         self.project_combo.currentIndexChanged.connect(self._on_project_changed)
         self.version_combo = QComboBox()
         self.version_combo.currentIndexChanged.connect(self._on_version_changed)
+        self.new_project_button = QPushButton("新建项目…")
+        self.new_project_button.setToolTip("从内置模板/复制现有项目/导入 JSON 新建一个项目基线")
+        self.new_project_button.clicked.connect(self._new_project)
         sel_grid.addWidget(QLabel("项目"), 0, 0)
         sel_grid.addWidget(self.project_combo, 0, 1)
         sel_grid.addWidget(QLabel("版本"), 0, 2)
         sel_grid.addWidget(self.version_combo, 0, 3)
+        sel_grid.addWidget(self.new_project_button, 0, 4)
         sel_grid.setColumnStretch(1, 1)
         sel_grid.setColumnStretch(3, 1)
         layout.addWidget(selector)
@@ -184,6 +188,22 @@ class BaselinePage(QWidget):
         if self.version_combo.count():
             self.version_combo.setCurrentIndex(0)
         self._render_selected()
+
+    def _new_project(self) -> None:
+        dialog = NewProjectDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.created_id:
+            return
+        self.projectChanged.emit()  # 新项目已设为活跃
+        self.reload()
+        idx = self.project_combo.findData(dialog.created_id)
+        if idx >= 0:
+            self.project_combo.setCurrentIndex(idx)
+        QMessageBox.information(
+            self,
+            "已创建项目",
+            f"项目「{dialog.created_id}」已创建为草稿并设为活跃。"
+            "可通过“上传文档合并”补充内容，校验通过后发布。",
+        )
 
     def _on_project_changed(self) -> None:
         project_id = self._current_project()

@@ -9,8 +9,9 @@ GUI entry point; Phase B swaps the underlying repository for an HTTP one.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import QSettings, QStandardPaths
 
@@ -59,3 +60,24 @@ def active_baseline_path() -> Path:
         if path is not None:
             return path
     return bundled_baseline_path()
+
+
+def bundled_baseline() -> Dict[str, Any]:
+    """The bundled default baseline, used as the "从内置模板" source."""
+    return json.loads(bundled_baseline_path().read_text(encoding="utf-8"))
+
+
+def load_project_baseline(baseline_id: str) -> Dict[str, Any]:
+    """The active version of an existing project, used as a clone source."""
+    repo = repository()
+    version = repo.active_version(baseline_id)
+    if not version:
+        raise ValueError(f"项目无可用版本：{baseline_id}")
+    return repo.load_version(baseline_id, version)
+
+
+def create_project(baseline: Dict[str, Any]) -> ProjectInfo:
+    """Create a project from a prepared baseline and make it active."""
+    info = repository().create_project(baseline)
+    set_active_project(info.baseline_id)
+    return info

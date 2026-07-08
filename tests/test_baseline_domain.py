@@ -11,6 +11,7 @@ import pytest
 from app_runtime import baseline_path
 from baseline import governance, versioning
 from baseline.errors import BaselineError, GovernanceError, ValidationError
+from baseline.newproject import prepare_new_baseline
 from baseline.schema import validation_errors
 from baseline.store import BaselineRepository
 
@@ -180,6 +181,28 @@ class TestRepository:
         bad = repo.save_draft(draft)
         with pytest.raises(GovernanceError):
             repo.set_active_version(bid, bad)  # 不干净的版本不能设为活跃（会喂 C 端出图）
+
+    def test_new_project_from_template(self, tmp_path: Path, bundled_baseline: dict) -> None:
+        repo = BaselineRepository(tmp_path)
+        repo.create_project(copy.deepcopy(bundled_baseline))  # 默认项目
+        new = prepare_new_baseline(bundled_baseline, "kids_coding_course", "少儿编程创作", "2026.07.10")
+        assert new["baseline_id"] == "kids_coding_course"
+        assert new["project"]["name"] == "少儿编程创作"
+        assert new["version"] == "2026.07.10.1"
+        assert new["parent_version"] is None
+        assert new["status"] == "draft"
+        assert validation_errors(new) == []  # 克隆保持 schema 合法（minItems 不破坏）
+        info = repo.create_project(new)
+        assert info.baseline_id == "kids_coding_course"
+        assert {p.baseline_id for p in repo.list_projects()} == {
+            bundled_baseline["baseline_id"], "kids_coding_course"
+        }
+
+    def test_new_project_bad_id_rejected(self, tmp_path: Path, bundled_baseline: dict) -> None:
+        repo = BaselineRepository(tmp_path)
+        bad = prepare_new_baseline(bundled_baseline, "Bad ID!", "x", "2026.07.10")
+        with pytest.raises(BaselineError):
+            repo.create_project(bad)
 
     def test_add_document(self, tmp_path: Path, bundled_baseline: dict) -> None:
         repo = BaselineRepository(tmp_path)
