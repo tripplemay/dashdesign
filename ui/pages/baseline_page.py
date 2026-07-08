@@ -14,12 +14,15 @@ from typing import Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -27,12 +30,14 @@ from PySide6.QtWidgets import (
 )
 
 from app_runtime import evidenced_text, text_list
-from baseline import governance
+from baseline import governance, merge
 from baseline.errors import BaselineError
 from baseline.schema import validation_errors
-from ui import baseline_service
+from baseline.store import today_str
+from ui import api_config, baseline_service
+from ui.merge_job import MergeSignals, run_merge_job
 from ui.utils import open_path
-from ui.widgets import FlowLayout
+from ui.widgets import FlowLayout, MergeReviewDialog, SettingsDialog
 
 _STATUS_LABELS = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
 _AUDIENCE_LABELS = {
@@ -96,6 +101,9 @@ class BaselinePage(QWidget):
         self.new_draft_button.clicked.connect(self._new_draft)
         self.validate_button = QPushButton("校验")
         self.validate_button.clicked.connect(self._validate)
+        self.merge_button = QPushButton("上传文档合并")
+        self.merge_button.setToolTip("上传新的项目介绍/背景文档，自动分析并把新信息合并为一个新草稿（需人工审校）")
+        self.merge_button.clicked.connect(self._upload_and_merge)
         self.publish_button = QPushButton("发布")
         self.publish_button.setToolTip("把草稿发布为不可变版本并设为活跃（需通过结构校验与治理检查）")
         self.publish_button.clicked.connect(self._publish)
@@ -106,20 +114,13 @@ class BaselinePage(QWidget):
         for btn in (
             self.set_active_button,
             self.new_draft_button,
+            self.merge_button,
             self.validate_button,
             self.publish_button,
             self.open_json_button,
             self.reload_button,
         ):
             btn.setMinimumWidth(0)
-        for btn in (
-            self.set_active_button,
-            self.new_draft_button,
-            self.validate_button,
-            self.publish_button,
-            self.open_json_button,
-            self.reload_button,
-        ):
             actions.addWidget(btn)
         actions.addStretch(1)
         self.status_hint = QLabel("")
@@ -313,6 +314,85 @@ class BaselinePage(QWidget):
         project_id, version = self._current_project(), self._current_version()
         if project_id and version:
             open_path(self, baseline_service.repository().version_path(project_id, version))
+
+    # -- document upload + LLM merge ----------------------------------
+    def _upload_and_merge(self) -> None:
+        project_id, version = self._current_project(), self._current_version()
+        if not project_id or not version:
+            return
+        if not api_config.has_api_key():
+            reply = QMessageBox.question(
+                self,
+                "尚未配置 API",
+                "文档分析需要调用图像/文本 API，但尚未配置 API Key。是否现在去“设置”填写？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                SettingsDialog(self).exec()
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择项目介绍/背景文档", "",
+            "文档 (*.pdf *.docx *.txt *.md);;All Files (*)",
+        )
+        if not path:
+            return
+        self._merge_source_path = Path(path)
+        self._merge_current = baseline_service.repository().load_version(project_id, version)
+        self._merge_signals = MergeSignals(self)
+        self._merge_signals.done.connect(self._on_merge_ready)
+        self._merge_signals.failed.connect(self._on_merge_failed)
+        self._merge_progress = QProgressDialog("正在分析文档并生成合并建议…", None, 0, 0, self)
+        self._merge_progress.setWindowTitle("文档合并")
+        self._merge_progress.setMinimumDuration(0)
+        self._merge_progress.setCancelButton(None)
+        self._merge_progress.show()
+        run_merge_job(
+            self._merge_source_path,
+            self._merge_current,
+            api_config.load_base_url(),
+            api_config.load_api_key(),
+            self._merge_signals,
+        )
+
+    def _on_merge_failed(self, message: str) -> None:
+        if getattr(self, "_merge_progress", None):
+            self._merge_progress.close()
+        QMessageBox.warning(self, "文档分析失败", message)
+
+    def _on_merge_ready(self, report: "merge.MergeReport") -> None:
+        if getattr(self, "_merge_progress", None):
+            self._merge_progress.close()
+        if not report.changes:
+            QMessageBox.information(self, "无新增内容", "未从该文档中提取到可合并的新信息。")
+            return
+        dialog = MergeReviewDialog(report, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if not report.accepted_changes() and not report.new_document.get("document_id"):
+            QMessageBox.information(self, "未采纳任何内容", "没有采纳任何候选，未生成草稿。")
+            return
+        repo = baseline_service.repository()
+        project_id = self._current_project()
+        draft = merge.apply_report(
+            self._merge_current, report, today_str(), repo.list_versions(project_id)
+        )
+        try:
+            new_version = repo.save_draft(draft)
+            repo.add_document(project_id, self._merge_source_path)
+        except BaselineError as exc:
+            QMessageBox.warning(self, "生成草稿失败", str(exc))
+            return
+        self._reload_versions()
+        idx = self.version_combo.findData(new_version)
+        if idx >= 0:
+            self.version_combo.setCurrentIndex(idx)
+        QMessageBox.information(
+            self,
+            "已生成合并草稿",
+            f"已根据文档生成草稿 {new_version}（采纳 {len(report.accepted_changes())} 条）。"
+            "请校验并在确认无误后发布。",
+        )
 
     # -- preview rendering (read-only) --------------------------------
     def _set_meta(self, name: str, version: str, status: str, mode: str) -> None:

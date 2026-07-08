@@ -30,10 +30,30 @@ Install desktop dependencies:
 
 ### 1. Project Baseline
 
-Reads `docs/baseline/baseline.v1.draft.json` and shows the current to-C parent
-and student poster baseline. This page is read-only for now. It is the local
-preview surface for the future cloud-synchronized baseline service and
-text-to-image prompt injection.
+Multi-project baseline manager. Baselines live in a per-user store under the
+AppData dir (`baselines/<baseline_id>/versions/<version>.json`, append-only),
+seeded on first run from the bundled `docs/baseline/baseline.v1.draft.json`.
+The page has a project selector + version selector; the structured preview is
+read-only. Version lifecycle runs through the Qt-free repository so schema
+validation and B->C governance are enforced in one place:
+
+- 设为活跃: pick which version generation uses (per project).
+- 新建草稿: derive an append-only draft from the selected version (links
+  parent_version; never mutates a published version).
+- 校验: JSON-schema + governance (blocked-keyword / claims) check.
+- 发布: draft -> published (immutable) + active; gated by validation and
+  governance.
+- 上传文档合并: upload a new intro/background doc (PDF/DOCX/TXT); the app parses
+  it locally, runs a citation-grounded LLM extraction via the configured API,
+  and shows a field-level review table. Blocked-keyword / suspected-promise /
+  low-confidence rows are pre-unchecked and highlighted; B-side facts are
+  bucketed into `source_facts.business_terms` (provenance only). Approving
+  builds a new draft — nothing is auto-published.
+
+The workflow generation always injects the active project's active baseline
+version (resolved by `ui.baseline_service`). This is Phase A (local); a Phase-B
+cloud backend will implement the same repository surface for multi-user shared
+projects (see `docs/baseline/CLOUD_API.md`).
 
 ### 2. Text-to-Image
 

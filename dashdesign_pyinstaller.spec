@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_all, collect_data_files
 
 
 ROOT = Path.cwd()
@@ -43,6 +43,7 @@ GUI_DATAS = (
     + collect_data_files("qdarktheme")
     + collect_data_files("qtawesome")
 )
+GUI_BINARIES = []
 GUI_HIDDEN_IMPORTS = [
     "qdarktheme",
     "qtawesome",
@@ -50,7 +51,17 @@ GUI_HIDDEN_IMPORTS = [
     "qtpy.QtCore",
     "qtpy.QtGui",
     "qtpy.QtWidgets",
+    "jsonschema",
+    "pypdfium2",
+    "docx",
 ]
+# 基线摄取/校验依赖：pypdfium2 带原生 pdfium 二进制、python-docx 带 default.docx
+# 模板、jsonschema 需 metadata——用 collect_all 一次性收 datas/binaries/hiddenimports。
+for _pkg in ("jsonschema", "pypdfium2", "docx"):
+    _datas, _binaries, _hidden = collect_all(_pkg)
+    GUI_DATAS += _datas
+    GUI_BINARIES += _binaries
+    GUI_HIDDEN_IMPORTS += _hidden
 COMMON_HIDDEN_IMPORTS = [
     "argparse",
     "base64",
@@ -91,7 +102,7 @@ COMMON_EXCLUDES = [
 gui_analysis = Analysis(
     ["desktop_qt_app.py"],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=GUI_BINARIES,
     datas=GUI_DATAS,
     hiddenimports=COMMON_HIDDEN_IMPORTS + GUI_HIDDEN_IMPORTS,
     hookspath=[],
