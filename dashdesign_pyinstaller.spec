@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 
 ROOT = Path.cwd()
 IS_MACOS = sys.platform == "darwin"
@@ -34,6 +36,21 @@ def collect_datas():
 
 
 COMMON_DATAS = collect_datas()
+# 主题库（SVG）与图标库（字体）都有包内数据文件，且当前 hooks-contrib
+# 没有对应 hook，必须显式收集，否则打包版启动即缺资源。
+GUI_DATAS = (
+    COMMON_DATAS
+    + collect_data_files("qdarktheme")
+    + collect_data_files("qtawesome")
+)
+GUI_HIDDEN_IMPORTS = [
+    "qdarktheme",
+    "qtawesome",
+    "qtpy",
+    "qtpy.QtCore",
+    "qtpy.QtGui",
+    "qtpy.QtWidgets",
+]
 COMMON_HIDDEN_IMPORTS = [
     "argparse",
     "base64",
@@ -75,8 +92,8 @@ gui_analysis = Analysis(
     ["desktop_qt_app.py"],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=COMMON_DATAS,
-    hiddenimports=COMMON_HIDDEN_IMPORTS,
+    datas=GUI_DATAS,
+    hiddenimports=COMMON_HIDDEN_IMPORTS + GUI_HIDDEN_IMPORTS,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -147,6 +147,12 @@ scaled to the actual input image size. This is useful when selecting a QR region
 from the original low-resolution source but applying the cleanup to a 200dpi
 output.
 
+The Qt client can also select the removal box visually: click
+`在预览图上框选`, then drag a rectangle on the preview image. The box
+coordinates and the reference size are filled in automatically (coordinates are
+mapped back to the original image pixels even when the preview shows a
+downsampled copy).
+
 ## Current Tooling
 
 - Primary GUI: `desktop_qt_app.py`
@@ -159,13 +165,42 @@ output.
 ## Qt Client Features
 
 - Native app menu entries for opening the project/output directory, running,
-  stopping, and quitting.
-- Sidebar workflow navigation with separate parameter panels.
-- Integrated image preview with fit, 100%, zoom in, zoom out, wheel zoom, and
-  drag-and-drop.
+  stopping, and quitting (`Ctrl+R` / `Cmd+R` to run, `Ctrl+.` / `Cmd+.` to
+  stop).
+- Sidebar workflow navigation (with icons) and per-workflow parameter panels;
+  mode-specific controls are shown or hidden per selected mode.
+- Token-based theme system with light/dark variants; `视图 → 外观` switches
+  between follow-system, light, and dark (persisted via QSettings).
+- Inline banner notifications for parameter errors, run completion (with an
+  open-output shortcut), and failures (with the last stderr line).
+- Run log with timestamps and colored stderr, plus copy/export buttons; the
+  log pane is collapsible via a vertical splitter.
+- Integrated image preview with fit, 100%, zoom in, zoom out, wheel zoom,
+  drag-and-drop, pixel/DPI/file-size info, and downsampled loading for very
+  large print masters. The preview canvas stays neutral dark in both themes
+  for stable print color judgement.
+- Batch print asks for confirmation with the number of images before running
+  and verifies the Real-ESRGAN binary is present.
+- Window geometry, splitter positions, and per-page parameters persist across
+  sessions via QSettings. Prompts, poster copy, API keys, and the
+  `Execute API` flags are deliberately not persisted.
 - `QProcess` execution so the UI remains responsive while local workflows run.
 - Image API keys are passed only as process environment variables and are not
   written to project files.
+
+## Code Layout
+
+- `desktop_qt_app.py`: thin entry point; dispatches `--worker` before any Qt
+  import and re-exports GUI symbols lazily.
+- `app_runtime.py`: Qt-free runtime helpers (paths, version, worker script
+  dispatch). `DashDesignWorker` imports only this module.
+- `ui/main_window.py`: main window, process lifecycle, preview panel.
+- `ui/pages/`: one module per workflow page.
+- `ui/widgets/`: shared widgets (PathField, ImagePreview with rectangle
+  selection, InfoBanner, ApiSettingsGroup, FlowLayout).
+- `ui/theme.py`: semantic design tokens and the light/dark QSS overlay on top
+  of the qdarktheme base.
+- `ui/commands.py`: pure, unit-tested command builders (`tests/`).
 
 ## Packaging
 

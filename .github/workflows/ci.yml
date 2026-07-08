@@ -50,10 +50,11 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          from PySide6.QtCore import QTimer
+          from PySide6.QtCore import QSettings, QTimer
           from desktop_qt_app import DashDesignQtApp, create_application
 
           app = create_application([])
+          QSettings().clear()  # 冒烟测试必须从默认状态开始，不受本机持久化设置影响
           window = DashDesignQtApp()
           window.show()
           window.batch_page.batch_input.setText(str(Path.cwd()))

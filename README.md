@@ -28,6 +28,13 @@ python3 -m venv .venv
 ./run_desktop_tool.sh
 ```
 
+## Test
+
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest tests/ -q
+```
+
 ## Package
 
 ```bash
