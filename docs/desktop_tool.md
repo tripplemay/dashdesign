@@ -169,8 +169,12 @@ downsampled copy).
   between follow-system, light, and dark (persisted via QSettings).
 - Inline banner notifications for parameter errors, run completion (with an
   open-output shortcut), and failures (with the last stderr line).
-- Run log with timestamps and colored stderr, plus copy/export buttons; the
-  log pane is collapsible via a vertical splitter.
+- Graphical run progress panel instead of a raw terminal log: a stage stepper
+  (待办 / 进行中 / 完成 / 跳过 / 失败 icons), a determinate progress bar with
+  x/N and ETA for batch and multi-candidate runs (busy bar with a
+  "this step takes a while" hint for single long API/inpaint stages), current
+  item label, and elapsed time. The raw stdout/stderr is not shown; it is kept
+  in memory and can be saved via 文件 → 导出运行日志 for troubleshooting.
 - Integrated image preview with fit, 100%, zoom in, zoom out, wheel zoom,
   drag-and-drop, pixel/DPI/file-size info, and downsampled loading for very
   large print masters. The preview canvas stays neutral dark in both themes
@@ -193,10 +197,16 @@ downsampled copy).
 - `ui/main_window.py`: main window, process lifecycle, preview panel.
 - `ui/pages/`: one module per workflow page.
 - `ui/widgets/`: shared widgets (PathField, ImagePreview with rectangle
-  selection, InfoBanner, ApiSettingsGroup, FlowLayout).
+  selection, InfoBanner, ApiSettingsGroup, FlowLayout, ProgressPanel).
 - `ui/theme.py`: semantic design tokens and the light/dark QSS overlay on top
   of the qdarktheme base.
 - `ui/commands.py`: pure, unit-tested command builders (`tests/`).
+- `ui/progress.py` + `scripts/progress.py`: the workflow progress protocol.
+  Scripts emit `##DASH_PROGRESS##`-prefixed JSON lines (gated on the
+  `DASHDESIGN_PROGRESS=1` env the GUI sets, so plain CLI runs stay unchanged);
+  the GUI parses them into the progress panel. Real-time delivery relies on
+  `app_runtime` setting the worker's stdout to line-buffered before running
+  the script.
 
 ## Packaging
 
