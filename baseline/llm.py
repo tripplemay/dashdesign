@@ -13,7 +13,9 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-DEFAULT_MODEL = os.environ.get("DASHDESIGN_BASELINE_MODEL", "qwen3.5-plus")
+# 默认取通用 OpenAI 文本模型；实际模型由调用方（读 ui.api_config 的用户设置）传入，
+# 不同网关支持的模型不同（本网关只支持 OpenAI 系）。
+DEFAULT_MODEL = os.environ.get("DASHDESIGN_BASELINE_MODEL", "gpt-4o")
 _TIMEOUT = 180
 
 

@@ -53,9 +53,12 @@ class SettingsDialog(QDialog):
         self.api_key_edit = QLineEdit(api_config.load_api_key())
         self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_key_edit.setPlaceholderText("必填：图像 API Key")
+        self.model_edit = QLineEdit(api_config.load_baseline_model())
+        self.model_edit.setPlaceholderText("文档合并用的文本模型，如 gpt-4o（需网关支持）")
         hint = QLabel(
             "填写后自动保存到本机（当前用户），下次启动自动填入，无需重复输入。"
-            "留空时回退到系统环境变量 OPENAI_BASE_URL / OPENAI_API_KEY。"
+            "留空 Base URL/Key 时回退到系统环境变量 OPENAI_BASE_URL / OPENAI_API_KEY。"
+            "“文档合并模型”须填你的网关实际支持的模型名（本网关仅支持 OpenAI 系，如 gpt-4o）。"
         )
         hint.setObjectName("Subtitle")
         hint.setWordWrap(True)
@@ -63,7 +66,9 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.base_url_edit, 0, 1)
         grid.addWidget(QLabel("API Key"), 1, 0)
         grid.addWidget(self.api_key_edit, 1, 1)
-        grid.addWidget(hint, 2, 0, 1, 2)
+        grid.addWidget(QLabel("文档合并模型"), 2, 0)
+        grid.addWidget(self.model_edit, 2, 1)
+        grid.addWidget(hint, 3, 0, 1, 2)
         grid.setColumnStretch(1, 1)
         return group
 
@@ -89,7 +94,7 @@ class SettingsDialog(QDialog):
             manager.set_mode(mode)
 
     def _on_save(self) -> None:
-        api_config.save(self.base_url_edit.text(), self.api_key_edit.text())
+        api_config.save(self.base_url_edit.text(), self.api_key_edit.text(), self.model_edit.text())
         self.accept()
 
     def _on_cancel(self) -> None:

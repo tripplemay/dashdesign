@@ -376,6 +376,7 @@ class BaselinePage(QWidget):
             api_config.load_base_url(),
             api_config.load_api_key(),
             self._merge_signals,
+            api_config.load_baseline_model(),
         )
 
     def _on_merge_failed(self, message: str) -> None:

@@ -29,13 +29,14 @@ def run_merge_job(
     base_url: str,
     api_key: str,
     signals: MergeSignals,
+    model: str = "",
 ) -> None:
     def worker() -> None:
         try:
             parsed = parse_document(path)
             if not parsed.sections:
                 raise RuntimeError("未从文档中解析出任何文本。")
-            chat = make_chat(base_url, api_key)
+            chat = make_chat(base_url, api_key, model)
             extraction = extract_candidates(parsed, current_baseline, chat)
             report = build_merge_report(current_baseline, extraction)
             signals.done.emit(report)
