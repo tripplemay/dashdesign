@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QGridLayout,
     QGroupBox,
@@ -18,9 +17,10 @@ from PySide6.QtWidgets import (
 )
 
 from app_runtime import PROJECT_ROOT
+from ui import api_config
 from ui.commands import GptForm
 from ui.utils import scrollable_page_layout
-from ui.widgets import ApiSettingsGroup, PathField
+from ui.widgets import PathField
 
 _MODE_HINTS = {
     "edit": "以源图为底做修改（/images/edits）：保留原构图，适合局部重绘。",
@@ -73,22 +73,24 @@ class GptPage(QWidget):
         self.gpt_description.setPlaceholderText("可选：补充设计描述或约束（多行）")
         self.gpt_description.setMaximumHeight(88)
         settings_layout.addWidget(self.gpt_description, 2, 1)
-        self.gpt_execute = QCheckBox("立即调用 API")
-        settings_layout.addWidget(self.gpt_execute, 3, 1)
-        execute_hint = QLabel("不勾选时只生成请求包（prompt 与请求 JSON），不调用模型、不产生费用。")
-        execute_hint.setObjectName("Subtitle")
-        execute_hint.setWordWrap(True)
-        settings_layout.addWidget(execute_hint, 4, 1)
         settings_layout.setColumnStretch(1, 1)
         layout.addWidget(settings_group)
-
-        self.api_group = ApiSettingsGroup()
-        layout.addWidget(self.api_group)
         layout.addStretch(1)
 
     def _sync_mode_hint(self) -> None:
         mode = str(self.gpt_mode.currentData() or "edit")
         self.mode_hint.setText(_MODE_HINTS.get(mode, ""))
+
+    def confirm_run(self, window) -> bool:  # type: ignore[no-untyped-def]
+        if not api_config.has_api_key():
+            window.banner.show_message(
+                "error",
+                "尚未配置 API Key，无法调用图像 API。请先在“文件 → API 设置”中填写。",
+                action_label="打开 API 设置",
+                action_callback=window.open_api_settings,
+            )
+            return False
+        return True
 
     def form(self) -> GptForm:
         return GptForm(
@@ -97,9 +99,8 @@ class GptPage(QWidget):
             mode=str(self.gpt_mode.currentData() or "edit"),
             dpi=str(self.gpt_dpi.value()),
             description=self.gpt_description.toPlainText(),
-            execute=self.gpt_execute.isChecked(),
-            base_url=self.api_group.base_url(),
-            api_key=self.api_group.api_key(),
+            base_url=api_config.load_base_url(),
+            api_key=api_config.load_api_key(),
         )
 
     def input_preview_path(self) -> "Path | None":
@@ -112,7 +113,6 @@ class GptPage(QWidget):
         settings.setValue("pages/gpt/output_dir", self.gpt_output.text())
         settings.setValue("pages/gpt/mode", str(self.gpt_mode.currentData()))
         settings.setValue("pages/gpt/dpi", self.gpt_dpi.value())
-        settings.setValue("pages/gpt/base_url", self.api_group.base_url())
 
     def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
         self.gpt_output.setText(str(settings.value("pages/gpt/output_dir", self.gpt_output.text())))
@@ -122,4 +122,3 @@ class GptPage(QWidget):
             if index >= 0:
                 self.gpt_mode.setCurrentIndex(index)
         self.gpt_dpi.setValue(settings.value("pages/gpt/dpi", self.gpt_dpi.value(), type=int))
-        self.api_group.set_base_url(str(settings.value("pages/gpt/base_url", "")))

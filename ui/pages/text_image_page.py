@@ -24,9 +24,10 @@ from PySide6.QtWidgets import (
 )
 
 from app_runtime import PROJECT_ROOT, baseline_path
+from ui import api_config
 from ui.commands import TextImageForm
 from ui.utils import scrollable_page_layout
-from ui.widgets import ApiSettingsGroup, PathField
+from ui.widgets import PathField
 
 _PROMPT_PLACEHOLDER_DEFAULT = "只描述背景、场景、主体、氛围和构图要求，不粘贴完整海报文案。"
 _PROMPT_PLACEHOLDER_FULL = "可选：补充完整海报的主体、场景或特别要求。留空时将使用模板、基线和文案生成。"
@@ -206,20 +207,14 @@ class TextImagePage(QWidget):
 
         option_row = QHBoxLayout()
         option_row.setSpacing(18)
-        self.t2i_execute = QCheckBox("立即调用 API")
         self.t2i_postprocess = QCheckBox("生成后输出印刷尺寸")
         self.t2i_postprocess.setChecked(True)
-        option_row.addWidget(self.t2i_execute)
         option_row.addWidget(self.t2i_postprocess)
         option_row.addStretch(1)
         params_layout.addLayout(option_row)
-        execute_hint = QLabel("不勾选“立即调用 API”时只生成请求包（prompt 与请求 JSON），不调用模型、不产生费用。")
-        execute_hint.setObjectName("Subtitle")
-        execute_hint.setWordWrap(True)
-        params_layout.addWidget(execute_hint)
         layout.addWidget(params)
 
-        # --- 输出与 API -----------------------------------------------
+        # --- 输出 -----------------------------------------------------
         paths = QGroupBox("输出")
         path_layout = QVBoxLayout(paths)
         self.t2i_output = PathField(
@@ -235,11 +230,19 @@ class TextImagePage(QWidget):
         path_layout.addWidget(baseline_label)
         layout.addWidget(paths)
 
-        self.api_group = ApiSettingsGroup()
-        layout.addWidget(self.api_group)
-
         layout.addStretch(1)
         self.sync_text_image_mode()
+
+    def confirm_run(self, window) -> bool:  # type: ignore[no-untyped-def]
+        if not api_config.has_api_key():
+            window.banner.show_message(
+                "error",
+                "尚未配置 API Key，无法调用图像 API。请先在“文件 → API 设置”中填写。",
+                action_label="打开 API 设置",
+                action_callback=window.open_api_settings,
+            )
+            return False
+        return True
 
     # ------------------------------------------------------------------
     def sync_text_image_mode(self) -> None:
@@ -283,10 +286,9 @@ class TextImagePage(QWidget):
             text_density=str(self.t2i_text_density.currentData() or "medium"),
             image_size=self.t2i_image_size.currentText(),
             quality=self.t2i_quality.currentText(),
-            execute=self.t2i_execute.isChecked(),
             postprocess=self.t2i_postprocess.isChecked(),
-            base_url=self.api_group.base_url(),
-            api_key=self.api_group.api_key(),
+            base_url=api_config.load_base_url(),
+            api_key=api_config.load_api_key(),
         )
 
     def input_preview_path(self) -> "Path | None":
@@ -306,8 +308,7 @@ class TextImagePage(QWidget):
         settings.setValue("pages/t2i/image_size", self.t2i_image_size.currentText())
         settings.setValue("pages/t2i/quality", self.t2i_quality.currentText())
         settings.setValue("pages/t2i/postprocess", self.t2i_postprocess.isChecked())
-        settings.setValue("pages/t2i/base_url", self.api_group.base_url())
-        # 提示词/文案/API Key/立即调用 属于单次运行输入，刻意不持久化。
+        # 提示词/文案属于单次运行输入，不持久化；API 凭据由 ui.api_config 统一持久化。
 
     def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
         self.t2i_output.setText(str(settings.value("pages/t2i/output_dir", self.t2i_output.text())))
@@ -337,5 +338,4 @@ class TextImagePage(QWidget):
                 if index >= 0:
                     combo.setCurrentIndex(index)
         self.t2i_postprocess.setChecked(settings.value("pages/t2i/postprocess", True, type=bool))
-        self.api_group.set_base_url(str(settings.value("pages/t2i/base_url", "")))
         self.sync_text_image_mode()

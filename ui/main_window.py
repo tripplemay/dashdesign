@@ -52,7 +52,7 @@ from ui.pages import BaselinePage, BatchPage, GptPage, QrPage, TextImagePage
 from ui.progress import ProgressModel, parse_progress_line
 from ui.updater import UpdateSignals, fetch_update_manifest
 from ui.utils import open_path
-from ui.widgets import ImagePreview, InfoBanner, ProgressPanel
+from ui.widgets import ApiSettingsDialog, ImagePreview, InfoBanner, ProgressPanel
 
 
 class DashDesignQtApp(QMainWindow):
@@ -108,6 +108,9 @@ class DashDesignQtApp(QMainWindow):
         self.export_log_action = QAction("导出运行日志…", self)
         self.export_log_action.triggered.connect(self.export_log)
 
+        self.api_settings_action = QAction("API 设置…", self)
+        self.api_settings_action.triggered.connect(self.open_api_settings)
+
         self.check_update_action = QAction("检查更新", self)
         self.check_update_action.triggered.connect(lambda: self.check_for_updates(silent=False))
 
@@ -118,6 +121,7 @@ class DashDesignQtApp(QMainWindow):
     def _build_menu(self) -> None:
         self.menuBar().setNativeMenuBar(True)
         file_menu = self.menuBar().addMenu("文件")
+        file_menu.addAction(self.api_settings_action)
         file_menu.addAction(self.open_project_action)
         file_menu.addAction(self.open_output_action)
         file_menu.addAction(self.export_log_action)
@@ -707,6 +711,11 @@ class DashDesignQtApp(QMainWindow):
         self.statusBar().showMessage("更新检查失败")
         if not silent:
             QMessageBox.warning(self, "更新检查失败", message)
+
+    def open_api_settings(self) -> None:
+        dialog = ApiSettingsDialog(self)
+        if dialog.exec() == ApiSettingsDialog.DialogCode.Accepted:
+            self.banner.show_message("success", "API 设置已保存。", timeout_ms=2500)
 
     def show_about(self) -> None:
         QMessageBox.information(

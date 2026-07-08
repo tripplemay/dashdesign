@@ -38,7 +38,6 @@ def text_image_form(**overrides: object) -> TextImageForm:
         text_density="medium",
         image_size="auto",
         quality="high",
-        execute=False,
         postprocess=True,
         base_url="",
         api_key="",
@@ -69,7 +68,7 @@ class TestTextImageCommand:
         assert "--mode" in command
         assert command[command.index("--mode") + 1] == "background"
         assert "--postprocess-print" in command
-        assert "--execute" not in command
+        assert "--execute" in command  # GUI 始终调用 API（无离线模式）
         assert output_dir == Path("/tmp/out")
         assert env == {}
 
@@ -115,9 +114,9 @@ class TestTextImageCommand:
         command, _, _ = build_text_image_command(text_image_form(candidates=""))
         assert "text-image" in command
 
-    def test_execute_flag_and_env(self) -> None:
+    def test_api_env_from_credentials(self) -> None:
         command, _, env = build_text_image_command(
-            text_image_form(execute=True, base_url="https://gw/v1", api_key="sk-1")
+            text_image_form(base_url="https://gw/v1", api_key="sk-1")
         )
         assert "--execute" in command
         assert env == {"OPENAI_BASE_URL": "https://gw/v1", "OPENAI_API_KEY": "sk-1"}
@@ -189,7 +188,6 @@ class TestGptCommand:
             mode="edit",
             dpi="200",
             description="",
-            execute=False,
             base_url="",
             api_key="",
         )
@@ -202,7 +200,7 @@ class TestGptCommand:
         assert "gpt" in command
         assert str(source) in command
         assert command[command.index("--api-mode") + 1] == "edit"
-        assert "--execute" not in command
+        assert "--execute" in command  # GUI 始终调用 API（无离线模式）
         assert output_dir == Path("/tmp/gpt-out")
         assert env == {}
 
@@ -210,11 +208,11 @@ class TestGptCommand:
         with pytest.raises(ValueError, match="源图片不存在"):
             build_gpt_command(self.gpt_form(tmp_path / "missing.jpg"))
 
-    def test_description_execute_and_env(self, tmp_path: Path) -> None:
+    def test_description_and_env(self, tmp_path: Path) -> None:
         source = tmp_path / "poster.jpg"
         source.write_bytes(b"fake")
         command, _, env = build_gpt_command(
-            self.gpt_form(source, description="重绘背景", execute=True, api_key="sk-2")
+            self.gpt_form(source, description="重绘背景", api_key="sk-2")
         )
         assert "--description" in command
         assert command[command.index("--description") + 1] == "重绘背景"

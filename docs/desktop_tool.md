@@ -77,12 +77,13 @@ Complete poster Image2 uses two additional controls:
 - Candidates: how many complete poster variants to generate. Use 3-4 for real
   selection; use 1 for a quick API smoke test.
 
-If `Execute API` is not checked, the tool creates an offline package containing
-the final prompt, baseline context, request JSON, and generation record. If
-checked, `OPENAI_API_KEY` is passed only as an environment variable for that
-process and is not written to project files. When print post-processing is
-enabled, the generated master is resized to the requested centimeter size and
-DPI.
+The desktop client always calls the image API (there is no offline toggle;
+the `立即调用 API` checkbox was removed). It uses the API base URL and key from
+文件 → API 设置 (see API Settings below); if none is configured it refuses to
+run and points you there. When print post-processing is enabled, the generated
+master is resized to the requested centimeter size and DPI. (The underlying
+`scripts/text_to_image_print.py` still supports an offline `--execute`-less run
+for command-line use.)
 
 Keep the visual prompt and poster copy separate. The visual prompt should
 describe scene, subject, mood, layout, and safe areas. The poster copy field can
@@ -119,9 +120,9 @@ Real-ESRGAN is not needed or when you want the simplest deterministic output.
 Calls `scripts/gpt_image_rebuild.py`.
 
 Use this when you want a GPT Image generation/edit request package for a source
-poster. If `Execute API` is not checked, the tool only creates the request
-package. If checked, `OPENAI_API_KEY` is passed only as an environment variable
-for that process and is not written to project files.
+poster. The desktop client always calls the API using the credentials from
+文件 → API 设置; the underlying `scripts/gpt_image_rebuild.py` still supports an
+offline (`--execute`-less) request-package run for command-line use.
 
 ### 5. Remove QR Area
 
@@ -182,11 +183,21 @@ downsampled copy).
 - Batch print asks for confirmation with the number of images before running
   and verifies the Real-ESRGAN binary is present.
 - Window geometry, splitter positions, and per-page parameters persist across
-  sessions via QSettings. Prompts, poster copy, API keys, and the
-  `Execute API` flags are deliberately not persisted.
+  sessions via QSettings. Prompts and poster copy (per-run inputs) are not
+  persisted.
 - `QProcess` execution so the UI remains responsive while local workflows run.
-- Image API keys are passed only as process environment variables and are not
-  written to project files.
+
+## API Settings
+
+The image API base URL and key are configured once in 文件 → API 设置 and
+persisted per-user via QSettings (`api/base_url`, `api/key`) — not in the repo,
+and they survive app updates (a project file would be lost inside the packaged
+`.app`). The key is stored in plain text in the OS user-settings store and is
+injected into the workflow subprocess as `OPENAI_BASE_URL` / `OPENAI_API_KEY`;
+if the fields are left blank the app falls back to those same environment
+variables inherited from the shell. All API workflows (text-to-image,
+full-poster, GPT rebuild) share this single configuration and refuse to run
+until a key is available.
 
 ## Code Layout
 

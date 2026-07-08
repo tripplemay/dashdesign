@@ -46,7 +46,6 @@ class TextImageForm:
     text_density: str
     image_size: str
     quality: str
-    execute: bool
     postprocess: bool
     base_url: str
     api_key: str
@@ -124,8 +123,7 @@ def build_text_image_command(form: TextImageForm):
         command += ["--mode", mode]
     if poster_copy:
         command += ["--poster-copy", poster_copy]
-    if form.execute:
-        command.append("--execute")
+    command.append("--execute")  # GUI 无离线模式：始终调用 API
     if form.postprocess:
         command.append("--postprocess-print")
 
@@ -195,7 +193,6 @@ class GptForm:
     mode: str
     dpi: str
     description: str
-    execute: bool
     base_url: str
     api_key: str
 
@@ -219,8 +216,7 @@ def build_gpt_command(form: GptForm):
     description = form.description.strip()
     if description:
         command += ["--description", description]
-    if form.execute:
-        command.append("--execute")
+    command.append("--execute")  # GUI 无离线模式：始终调用 API
     return command, output_dir, api_env(form.base_url, form.api_key)
 
 
