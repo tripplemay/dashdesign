@@ -175,7 +175,8 @@ class ImagePreview(QGraphicsView):
         self.scale(factor, factor)
 
     def wheelEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.pixmap_item is None:
+        if self.pixmap_item is None or event.angleDelta().y() == 0:
+            # 纯横向滚动（触控板横扫）不应触发缩放
             super().wheelEvent(event)
             return
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15

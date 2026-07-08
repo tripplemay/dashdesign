@@ -278,6 +278,15 @@ class TestQrCommand:
         command, _, _ = build_qr_command(self.qr_form(source, box=" 100, 200, 300, 400 "))
         assert command[command.index("--box") + 1] == "100,200,300,400"
 
+    def test_fullwidth_comma_and_decimals_accepted(self, tmp_path: Path) -> None:
+        # 与 scripts/remove_qr_area.py 的 parse_box 语义一致
+        source = tmp_path / "poster.jpg"
+        source.write_bytes(b"fake")
+        command, _, _ = build_qr_command(self.qr_form(source, box="100，200，300，400"))
+        assert command[command.index("--box") + 1] == "100,200,300,400"
+        command, _, _ = build_qr_command(self.qr_form(source, box="100.5,200,300.9,400"))
+        assert command[command.index("--box") + 1] == "100,200,300,400"
+
     def test_reference_size_forwarded(self, tmp_path: Path) -> None:
         source = tmp_path / "poster.jpg"
         source.write_bytes(b"fake")

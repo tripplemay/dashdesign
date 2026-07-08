@@ -237,7 +237,11 @@ class QrForm:
     radius: str
 
 
-_BOX_PATTERN = re.compile(r"\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*")
+# 与 scripts/remove_qr_area.py 的 parse_box 语义一致：接受全角逗号与小数坐标。
+_BOX_NUMBER = r"\d+(?:\.\d+)?"
+_BOX_PATTERN = re.compile(
+    r"\s*({n})\s*,\s*({n})\s*,\s*({n})\s*,\s*({n})\s*".format(n=_BOX_NUMBER)
+)
 _SIZE_PATTERN = re.compile(r"\s*\d+\s*x\s*\d+\s*", re.IGNORECASE)
 
 
@@ -246,13 +250,13 @@ def build_qr_command(form: QrForm):
     output_dir = Path(form.output_dir).expanduser()
     if not source.exists():
         raise ValueError("输入图片不存在")
-    box = form.box.strip()
+    box = form.box.strip().replace("，", ",")
     if not box:
         raise ValueError("请填写清除区域 x1,y1,x2,y2（可在预览图上框选）")
     match = _BOX_PATTERN.fullmatch(box)
     if match is None:
-        raise ValueError("清除区域格式应为四个非负整数：x1,y1,x2,y2")
-    x1, y1, x2, y2 = (int(value) for value in match.groups())
+        raise ValueError("清除区域格式应为四个非负数：x1,y1,x2,y2")
+    x1, y1, x2, y2 = (int(float(value)) for value in match.groups())
     if x2 <= x1 or y2 <= y1:
         raise ValueError("清除区域无效：需要 x2 > x1 且 y2 > y1")
     box = f"{x1},{y1},{x2},{y2}"

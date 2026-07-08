@@ -484,7 +484,23 @@ class DashDesignQtApp(QMainWindow):
         self.process.readyReadStandardOutput.connect(self.read_stdout)
         self.process.readyReadStandardError.connect(self.read_stderr)
         self.process.finished.connect(self.process_finished)
+        self.process.errorOccurred.connect(self.process_error)
         self.process.start(command[0], command[1:])
+
+    def process_error(self, error) -> None:  # type: ignore[no-untyped-def]
+        # 启动失败时 finished 永不触发，必须在这里复位运行状态；
+        # 其他错误（如 Crashed）仍由 process_finished 统一收尾。
+        if error != QProcess.ProcessError.FailedToStart or self.process is None:
+            return
+        self.append_log("[错误] 工作流进程启动失败：找不到可执行文件或没有执行权限。", kind="err")
+        self.statusBar().showMessage("启动失败")
+        self.banner.show_message(
+            "error", "工作流进程启动失败：找不到可执行文件或没有执行权限，请检查安装是否完整。"
+        )
+        process = self.process
+        self.process = None
+        process.deleteLater()
+        self._set_running(False)
 
     def stop_process(self) -> None:
         if self.process is None:

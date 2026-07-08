@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -23,8 +25,10 @@ from ui.commands import BatchForm
 from ui.widgets import PathField
 
 # 与 scripts/prepare_print_assets.py 的 discover_sources 保持一致：
-# 批量脚本只处理这三种扩展名，其余会被静默跳过。
+# 只处理这三种扩展名，且文件名必须含 "NNN乘以NNN" 物理尺寸；
+# --only 支持精确文件名或 shell 通配符（fnmatch）。
 _SCRIPT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+_SIZE_RE = re.compile(r"(\d+)\s*乘(?:以)?\s*(\d+)")
 
 
 class BatchPage(QWidget):
@@ -80,7 +84,7 @@ class BatchPage(QWidget):
         self.batch_dpi.setValue(200)
         self.batch_dpi.setToolTip("印刷输出分辨率：写真/展架常用 200，大幅喷绘可用 150。")
         self.batch_only = QLineEdit()
-        self.batch_only.setPlaceholderText("可选：只处理某个文件名（精确匹配，含扩展名）")
+        self.batch_only.setPlaceholderText("可选：只处理某个文件名，支持通配符（如 海报*.jpg）")
         self.batch_force = QCheckBox("覆盖/强制重新生成")
         self.batch_force.setToolTip("勾选后即使输出目录已有同名成品也会重新生成并覆盖。")
         self.batch_keep_masters = QCheckBox("保留 Real-ESRGAN 中间 master")
@@ -107,18 +111,24 @@ class BatchPage(QWidget):
             )
             self.tool_status.show()
 
-    def _count_images(self) -> int:
+    def _count_images(self) -> "tuple[int, int]":
+        """返回 (可处理数, 因文件名不含尺寸被跳过数)，复刻 discover_sources 语义。"""
         input_dir = Path(self.batch_input.text()).expanduser()
         only = self.batch_only.text().strip()
-        if only:
-            return 1 if (input_dir / only).exists() else 0
         if not input_dir.is_dir():
-            return 0
-        return sum(
-            1
-            for path in input_dir.iterdir()
-            if path.is_file() and path.suffix.lower() in _SCRIPT_IMAGE_EXTENSIONS
-        )
+            return 0, 0
+        processable = 0
+        skipped_no_size = 0
+        for path in input_dir.iterdir():
+            if not path.is_file() or path.suffix.lower() not in _SCRIPT_IMAGE_EXTENSIONS:
+                continue
+            if only and not (path.name == only or fnmatch.fnmatch(path.name, only)):
+                continue
+            if _SIZE_RE.search(path.name):
+                processable += 1
+            else:
+                skipped_no_size += 1
+        return processable, skipped_no_size
 
     def confirm_run(self, window) -> bool:  # type: ignore[no-untyped-def]
         self._refresh_tool_status()
@@ -129,13 +139,18 @@ class BatchPage(QWidget):
                 "请先运行 scripts/bootstrap_runtime_assets.sh，或切换为基础输出。",
             )
             return False
-        count = self._count_images()
+        count, skipped = self._count_images()
         if count == 0:
             window.banner.show_message(
-                "error", "输入目录中没有可处理的图片（仅支持 jpg/jpeg/png，或“只处理文件”不存在）。"
+                "error",
+                "输入目录中没有可处理的图片：仅支持 jpg/jpeg/png，"
+                "且文件名必须含物理尺寸（如“200乘以80”）。"
+                + (f" 有 {skipped} 张图片因文件名不含尺寸被跳过。" if skipped else ""),
             )
             return False
         message = f"将处理 {count} 张图片，输出到：\n{self.batch_output.text()}"
+        if skipped:
+            message += f"\n\n另有 {skipped} 张图片文件名不含尺寸（如“200乘以80”），将被跳过。"
         if self.batch_force.isChecked():
             message += "\n\n已勾选“覆盖/强制重新生成”，已有输出将被覆盖。"
         reply = QMessageBox.question(

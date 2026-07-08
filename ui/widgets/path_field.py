@@ -66,11 +66,13 @@ class PathField(QWidget):
         urls = event.mimeData().urls()
         if not urls:
             return
+        raw = urls[0].toLocalFile()
+        if not raw:
+            # 非本地 URL（如浏览器拖入的远程图片）没有本地路径，忽略。
+            return
         from pathlib import Path
 
-        dropped = Path(urls[0].toLocalFile())
-        if not str(dropped):
-            return
+        dropped = Path(raw)
         if self.mode == "dir":
             self.setText(str(dropped if dropped.is_dir() else dropped.parent))
         else:

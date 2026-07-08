@@ -13,6 +13,11 @@ class FlowLayout(QLayout):
         self.setContentsMargins(margin, margin, margin, margin)
         self._spacing = spacing
 
+    def __del__(self) -> None:
+        # QLayout 基类析构不会删除 items；取出让 Python 拿回所有权后释放。
+        while self.count():
+            self.takeAt(0)
+
     def addItem(self, item: QLayoutItem) -> None:  # noqa: N802 (Qt API)
         self._items.append(item)
 
