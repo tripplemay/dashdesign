@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from app_runtime import PROJECT_ROOT
 from ui.commands import GptForm
+from ui.utils import scrollable_page_layout
 from ui.widgets import ApiSettingsGroup, PathField
 
 _MODE_HINTS = {
@@ -30,9 +31,7 @@ _MODE_HINTS = {
 class GptPage(QWidget):
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout = scrollable_page_layout(self)
 
         paths = QGroupBox("源图与输出")
         path_layout = QVBoxLayout(paths)

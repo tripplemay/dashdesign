@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from app_runtime import PROJECT_ROOT, first_image, runtime_tool_path
 from ui.commands import BatchForm
+from ui.utils import scrollable_page_layout
 from ui.widgets import PathField
 
 # 与 scripts/prepare_print_assets.py 的 discover_sources 保持一致：
@@ -34,9 +35,7 @@ _SIZE_RE = re.compile(r"(\d+)\s*乘(?:以)?\s*(\d+)")
 class BatchPage(QWidget):
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout = scrollable_page_layout(self)
 
         paths = QGroupBox("输入输出")
         path_layout = QVBoxLayout(paths)

@@ -19,15 +19,14 @@ from PySide6.QtWidgets import (
 
 from app_runtime import PROJECT_ROOT
 from ui.commands import QrForm
+from ui.utils import scrollable_page_layout
 from ui.widgets import PathField
 
 
 class QrPage(QWidget):
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout = scrollable_page_layout(self)
 
         paths = QGroupBox("输入输出")
         path_layout = QVBoxLayout(paths)

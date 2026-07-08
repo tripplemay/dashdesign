@@ -13,13 +13,11 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
-    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -27,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from app_runtime import PROJECT_ROOT, baseline_path
 from ui.commands import TextImageForm
+from ui.utils import scrollable_page_layout
 from ui.widgets import ApiSettingsGroup, PathField
 
 _PROMPT_PLACEHOLDER_DEFAULT = "只描述背景、场景、主体、氛围和构图要求，不粘贴完整海报文案。"
@@ -48,18 +47,7 @@ def _mark_invalid(widget, invalid: bool) -> None:  # type: ignore[no-untyped-def
 class TextImagePage(QWidget):
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
-        page_layout = QVBoxLayout(self)
-        page_layout.setContentsMargins(0, 0, 0, 0)
-        page_layout.setSpacing(0)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-
-        content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 8, 0)
-        layout.setSpacing(12)
+        layout = scrollable_page_layout(self)
 
         # --- 生成模式 -------------------------------------------------
         mode_group = QGroupBox("生成模式")
@@ -265,8 +253,6 @@ class TextImagePage(QWidget):
         layout.addWidget(self.api_group)
 
         layout.addStretch(1)
-        scroll.setWidget(content)
-        page_layout.addWidget(scroll)
         self.sync_text_image_mode()
 
     # ------------------------------------------------------------------
