@@ -13,6 +13,11 @@ from pathlib import Path
 from typing import Any
 
 from image_api_client import execute_image_generation
+from prompt_template_compiler import (
+    DEFAULT_TEMPLATE_LIBRARY,
+    compile_prompt_template_profile,
+    load_template_library,
+)
 from text_to_image_print import (
     DEFAULT_BASELINE,
     PosterCopy,
@@ -31,7 +36,7 @@ from text_to_image_print import (
 )
 
 
-PROMPT_TEMPLATE_VERSION = "full_poster_image2.v1"
+PROMPT_TEMPLATE_VERSION = "full_poster_image2.v2"
 DEFAULT_FULL_POSTER_OUTPUT_DIR = Path("workflow_samples") / "full_poster_image2"
 
 
@@ -87,6 +92,7 @@ def build_full_poster_prompt(
     dpi: int,
     image_size: str,
     style: str,
+    template_profile: dict[str, Any],
 ) -> str:
     project = baseline.get("project", {}) if isinstance(baseline, dict) else {}
     consumer = baseline.get("consumer_baseline", {}) if isinstance(baseline, dict) else {}
@@ -94,6 +100,13 @@ def build_full_poster_prompt(
     audience = consumer.get("audience", {}) if isinstance(consumer, dict) else {}
 
     modules = poster_copy.normalized_modules()
+    template_labels = template_profile.get("labels", {}) if isinstance(template_profile, dict) else {}
+    template_ids = template_profile.get("ids", {}) if isinstance(template_profile, dict) else {}
+    positive_blocks = template_profile.get("positive_blocks", []) if isinstance(template_profile, dict) else []
+    typography_blocks = template_profile.get("typography_blocks", []) if isinstance(template_profile, dict) else []
+    cta_guidance = template_profile.get("cta_guidance", []) if isinstance(template_profile, dict) else []
+    negative_blocks = template_profile.get("negative_blocks", []) if isinstance(template_profile, dict) else []
+    risk_notes = template_profile.get("risk_notes", []) if isinstance(template_profile, dict) else []
     sections = [
         "Task: Generate one complete Chinese enrollment poster as a finished raster image.",
         "The image model must design the background, composition, typography, title effects, course badges, and call-to-action together.",
@@ -107,22 +120,34 @@ def build_full_poster_prompt(
         "Consumer positioning:",
         str(consumer.get("positioning", "")),
         "",
+        "Prompt template selections:",
+        f"- Purpose: {template_labels.get('purpose', '')} ({template_ids.get('purpose', '')})",
+        f"- Style: {template_labels.get('style', '')} ({template_ids.get('style', '')})",
+        f"- Layout: {template_labels.get('layout', '')} ({template_ids.get('layout', '')})",
+        f"- Text density: {template_labels.get('text_density', '')} ({template_ids.get('text_density', '')})",
+        "",
+        "Template creative brief:",
+        *[f"- {item}" for item in positive_blocks],
+        "",
         "Visual brief:",
         user_prompt,
         "",
-        "Poster art direction:",
+        "Additional user art direction:",
         style,
         "",
         "Required exact Chinese copy. Render these strings accurately. Do not rewrite, translate, abbreviate, or add extra words:",
         *[f"- {line}" for line in exact_copy_lines(poster_copy)],
         "",
         "Typography requirements:",
+        *[f"- {item}" for item in typography_blocks],
         "- Main headline must look like custom professional Chinese poster lettering, not a plain system font.",
         "- Use strong title hierarchy, designed strokes, dimensional outline, glow or material effects that match the scene.",
         "- Course modules should look like poster badges, stickers, futuristic labels, or integrated display panels, not generic software UI cards.",
         "- The call-to-action should feel like a promotional poster ribbon or banner.",
         "- Ensure Chinese glyphs are complete, readable, and visually balanced.",
         *[f"- {item}" for item in text_density_guidance(poster_copy)],
+        *[f"- {item}" for item in cta_guidance],
+        *[f"- Template risk note: {item}" for item in risk_notes],
         "",
         "Scene and subject guidance from project baseline:",
         *[f"- {item}" for item in visual.get("style_keywords", [])],
@@ -138,6 +163,7 @@ def build_full_poster_prompt(
         "- Leave a clean placeholder area for a real QR code, but do not generate a scannable QR code.",
         "- Do not include phone numbers, prices, logos, watermarks, signatures, business partnership language, or school-operator scenes.",
         "- Do not include pseudo-text, gibberish, misspelled Chinese, duplicate text, or any extra readable text beyond the required copy.",
+        *[f"- {item}" for item in negative_blocks],
     ]
     if modules:
         sections.append("- Keep module text grouped in a coherent course section.")
@@ -166,6 +192,7 @@ def write_run_script(path: Path, request_json_name: str, output_name: str) -> No
 
 def build_package(
     baseline_path: Path,
+    template_library_path: Path,
     output_dir: Path,
     width_cm: float,
     height_cm: float,
@@ -173,6 +200,11 @@ def build_package(
     user_prompt: str,
     poster_copy_text: str,
     style: str,
+    purpose_template: str | None,
+    style_template: str | None,
+    layout_template: str | None,
+    text_density_template: str | None,
+    negative_template: str | None,
     model: str,
     quality: str,
     requested_image_size: str,
@@ -189,11 +221,23 @@ def build_package(
     if candidates <= 0:
         raise ValueError("Candidates must be positive")
     if not user_prompt.strip():
-        raise ValueError("Prompt must not be empty")
+        user_prompt = (
+            "Use the selected purpose, style, layout, text-density template, "
+            "project baseline, and poster copy to design a complete to-C AI education poster."
+        )
     if not poster_copy_text.strip():
         raise ValueError("Full-poster mode requires poster copy")
 
     baseline = load_baseline(baseline_path)
+    template_library = load_template_library(template_library_path)
+    template_profile = compile_prompt_template_profile(
+        template_library,
+        purpose_template,
+        style_template,
+        layout_template,
+        text_density_template,
+        negative_template,
+    )
     poster_copy = parse_poster_copy(poster_copy_text)
     if not poster_copy.has_content():
         raise ValueError("Poster copy did not include usable headline/module/CTA content")
@@ -223,6 +267,7 @@ def build_package(
         dpi,
         image_size,
         style,
+        template_profile,
     )
     context_source = prompt_context_source(baseline)
     context_hash = profile_hash(context_source)
@@ -233,6 +278,7 @@ def build_package(
     package_dir.mkdir(parents=True, exist_ok=True)
     (package_dir / "prompt.md").write_text(prompt, encoding="utf-8")
     write_json(package_dir / "baseline_context.json", context_source)
+    write_json(package_dir / "prompt_template_profile.json", template_profile)
     write_json(package_dir / "poster_copy.json", asdict(poster_copy))
     write_json(package_dir / "expected_text.json", expected_text_items(poster_copy))
     write_json(
@@ -256,6 +302,9 @@ def build_package(
             "profile_hash": context_hash,
             "poster_copy_hash": copy_hash,
             "prompt_template_version": PROMPT_TEMPLATE_VERSION,
+            "prompt_template_library": str(template_library_path),
+            "prompt_template_library_version": template_profile.get("library_version"),
+            "prompt_template_ids": template_profile.get("ids"),
             "workflow": "full_poster_image2",
             "model": model,
             "size": image_size,
@@ -354,17 +403,23 @@ def build_package(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
+    parser.add_argument("--template-library", type=Path, default=DEFAULT_TEMPLATE_LIBRARY)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_FULL_POSTER_OUTPUT_DIR)
     parser.add_argument("--width-cm", type=float, required=True)
     parser.add_argument("--height-cm", type=float, required=True)
     parser.add_argument("--dpi", type=int, default=200)
-    parser.add_argument("--prompt", required=True, help="Visual brief for the complete poster.")
+    parser.add_argument("--prompt", default="", help="Optional visual brief for the complete poster.")
     parser.add_argument("--poster-copy", required=True, help="Raw Chinese poster copy to render inside the image.")
     parser.add_argument(
         "--style",
         default="high-end AI education enrollment poster, cinematic neon lighting, professional Chinese advertising typography",
         help="Typography and art-direction style.",
     )
+    parser.add_argument("--purpose-template", default=None, help="Purpose template id.")
+    parser.add_argument("--style-template", default=None, help="Style template id.")
+    parser.add_argument("--layout-template", default=None, help="Layout template id.")
+    parser.add_argument("--text-density", default=None, help="Text-density template id.")
+    parser.add_argument("--negative-template", default=None, help="Negative prompt template id.")
     parser.add_argument("--model", default="gpt-image-2")
     parser.add_argument("--quality", default="high", choices=("low", "medium", "high", "auto"))
     parser.add_argument("--image-size", default="auto", help="auto or WIDTHxHEIGHT.")
@@ -381,6 +436,7 @@ def main() -> int:
     try:
         package_dir = build_package(
             args.baseline.resolve(),
+            args.template_library.resolve(),
             args.output_dir.resolve(),
             args.width_cm,
             args.height_cm,
@@ -388,6 +444,11 @@ def main() -> int:
             args.prompt.strip(),
             args.poster_copy,
             args.style.strip(),
+            args.purpose_template,
+            args.style_template,
+            args.layout_template,
+            args.text_density,
+            args.negative_template,
             args.model,
             args.quality,
             args.image_size,

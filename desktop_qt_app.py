@@ -51,6 +51,7 @@ VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python"
 PYTHON = str(VENV_PYTHON if VENV_PYTHON.exists() else Path(sys.executable))
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
 BASELINE_RELATIVE_PATH = Path("docs") / "baseline" / "baseline.v1.draft.json"
+PROMPT_TEMPLATE_RELATIVE_PATH = Path("docs") / "prompt_templates" / "full_poster_templates.v1.json"
 
 
 def read_app_version() -> str:
@@ -252,6 +253,13 @@ def baseline_path() -> Path:
     if bundled.exists():
         return bundled
     return PROJECT_ROOT / BASELINE_RELATIVE_PATH
+
+
+def prompt_template_library_path() -> Path:
+    bundled = APP_ROOT / PROMPT_TEMPLATE_RELATIVE_PATH
+    if bundled.exists():
+        return bundled
+    return PROJECT_ROOT / PROMPT_TEMPLATE_RELATIVE_PATH
 
 
 def evidenced_text(value: object) -> str:
@@ -591,10 +599,34 @@ class DashDesignQtApp(QMainWindow):
         self.t2i_text_style.addItem("清爽教育", "clean_edu")
         self.t2i_text_style.addItem("科技霓虹", "tech_neon")
         self.t2i_text_style.setMinimumWidth(130)
+        self.t2i_purpose_template = QComboBox()
+        self.t2i_purpose_template.addItem("课程招生海报", "course_enrollment")
+        self.t2i_purpose_template.addItem("免费试听/体验课", "trial_class")
+        self.t2i_purpose_template.addItem("AI能力测评预约", "ability_assessment")
+        self.t2i_purpose_template.addItem("课程体系介绍", "course_system")
+        self.t2i_purpose_template.setMinimumWidth(150)
+        self.t2i_style_template = QComboBox()
+        self.t2i_style_template.addItem("科技霓虹", "tech_neon")
+        self.t2i_style_template.addItem("明亮少儿教育", "bright_edu")
+        self.t2i_style_template.addItem("梦幻AI绘图", "fantasy_ai_art")
+        self.t2i_style_template.addItem("高端简洁", "premium_minimal")
+        self.t2i_style_template.addItem("漫画热血", "comic_pop")
+        self.t2i_style_template.setMinimumWidth(150)
+        self.t2i_layout_template = QComboBox()
+        self.t2i_layout_template.addItem("顶部标题+模块+CTA", "headline_modules_cta")
+        self.t2i_layout_template.addItem("中心主体+环绕模块", "central_subject_orbit_modules")
+        self.t2i_layout_template.addItem("竖版展架信息流", "portrait_exhibition")
+        self.t2i_layout_template.addItem("方版社媒主视觉", "square_social")
+        self.t2i_layout_template.setMinimumWidth(160)
+        self.t2i_text_density = QComboBox()
+        self.t2i_text_density.addItem("中文字", "medium")
+        self.t2i_text_density.addItem("低文字", "low")
+        self.t2i_text_density.addItem("高文字", "high")
+        self.t2i_text_density.setMinimumWidth(100)
         self.t2i_full_style = QLineEdit(
-            "高端少儿 AI 教育招生海报，真实商业中文标题字效，科技感，明亮，面向家长和孩子"
+            ""
         )
-        self.t2i_full_style.setPlaceholderText("完整海报 Image2 模式使用：描述整体海报字体、风格、气质")
+        self.t2i_full_style.setPlaceholderText("可选：补充模板之外的画面/字体/气质要求")
         self.t2i_candidates = QLineEdit("4")
         self.t2i_candidates.setFixedWidth(76)
         self.t2i_width_cm = QLineEdit("120")
@@ -625,9 +657,29 @@ class DashDesignQtApp(QMainWindow):
         mode_row.addStretch(1)
         params_layout.addLayout(mode_row)
 
+        template_row = QHBoxLayout()
+        template_row.setSpacing(8)
+        template_row.addWidget(QLabel("用途模板"))
+        template_row.addWidget(self.t2i_purpose_template)
+        template_row.addSpacing(12)
+        template_row.addWidget(QLabel("风格模板"))
+        template_row.addWidget(self.t2i_style_template)
+        template_row.addSpacing(12)
+        template_row.addWidget(QLabel("文字密度"))
+        template_row.addWidget(self.t2i_text_density)
+        template_row.addStretch(1)
+        params_layout.addLayout(template_row)
+
+        layout_template_row = QHBoxLayout()
+        layout_template_row.setSpacing(8)
+        layout_template_row.addWidget(QLabel("构图模板"))
+        layout_template_row.addWidget(self.t2i_layout_template)
+        layout_template_row.addStretch(1)
+        params_layout.addLayout(layout_template_row)
+
         full_style_row = QHBoxLayout()
         full_style_row.setSpacing(8)
-        full_style_row.addWidget(QLabel("整图风格"))
+        full_style_row.addWidget(QLabel("补充要求"))
         full_style_row.addWidget(self.t2i_full_style, 1)
         params_layout.addLayout(full_style_row)
 
@@ -694,10 +746,18 @@ class DashDesignQtApp(QMainWindow):
             self.t2i_full_style.setEnabled(full_poster_mode)
         if hasattr(self, "t2i_candidates"):
             self.t2i_candidates.setEnabled(full_poster_mode)
+        for name in (
+            "t2i_purpose_template",
+            "t2i_style_template",
+            "t2i_layout_template",
+            "t2i_text_density",
+        ):
+            if hasattr(self, name):
+                getattr(self, name).setEnabled(full_poster_mode)
         if hasattr(self, "t2i_prompt"):
             if full_poster_mode:
                 self.t2i_prompt.setPlaceholderText(
-                    "描述完整海报的画面、主体、风格、字体设计、氛围和构图。完整文案请填写在海报文案区域。"
+                    "可选：补充完整海报的主体、场景或特别要求。留空时将使用模板、基线和文案生成。"
                 )
             else:
                 self.t2i_prompt.setPlaceholderText("只描述背景、场景、主体、氛围和构图要求，不粘贴完整海报文案。")
@@ -1080,9 +1140,9 @@ class DashDesignQtApp(QMainWindow):
     def build_text_image_command(self) -> tuple[list[str], Path, dict[str, str]]:
         output_dir = Path(self.t2i_output.text()).expanduser()
         prompt = self.t2i_prompt.toPlainText().strip()
-        if not prompt:
-            raise ValueError("请填写文生图提示词")
         mode = str(self.t2i_mode.currentData() or "background")
+        if not prompt and mode != "full_poster":
+            raise ValueError("请填写文生图提示词")
         poster_copy = self.t2i_copy.toPlainText().strip()
         if mode in {"poster", "full_poster"} and not poster_copy:
             raise ValueError("带文字海报或完整海报模式需要填写海报文案")
@@ -1101,8 +1161,6 @@ class DashDesignQtApp(QMainWindow):
         if candidates <= 0:
             raise ValueError("候选数必须大于 0")
         full_style = self.t2i_full_style.text().strip()
-        if mode == "full_poster" and not full_style:
-            raise ValueError("完整海报 Image2 模式需要填写整图风格")
 
         worker_name = "full-poster" if mode == "full_poster" else "text-image"
         command = [
@@ -1127,6 +1185,18 @@ class DashDesignQtApp(QMainWindow):
         ]
         if mode == "full_poster":
             command += [
+                "--template-library",
+                str(prompt_template_library_path()),
+                "--purpose-template",
+                str(self.t2i_purpose_template.currentData() or "course_enrollment"),
+                "--style-template",
+                str(self.t2i_style_template.currentData() or "tech_neon"),
+                "--layout-template",
+                str(self.t2i_layout_template.currentData() or "headline_modules_cta"),
+                "--text-density",
+                str(self.t2i_text_density.currentData() or "medium"),
+                "--negative-template",
+                "full_poster",
                 "--style",
                 full_style,
                 "--candidates",

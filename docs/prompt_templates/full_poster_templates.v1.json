@@ -1,0 +1,246 @@
+{
+  "version": "2026.07.08.1",
+  "description": "DashDesign complete-poster Image2 prompt template library for to-C AI education poster generation.",
+  "defaults": {
+    "purpose": "course_enrollment",
+    "style": "tech_neon",
+    "layout": "headline_modules_cta",
+    "text_density": "medium",
+    "negative": "full_poster"
+  },
+  "purposes": [
+    {
+      "id": "course_enrollment",
+      "name": "课程招生海报",
+      "goal": "Convert parents and students into course inquiries or registrations.",
+      "positive_blocks": [
+        "to-C children and parent-facing AI digital creation course enrollment poster",
+        "make course value clear at a glance: future skills, creative expression, visible works, and confidence",
+        "show children learning and creating in a polished future classroom or digital art studio",
+        "the poster must feel like a real education marketing asset, not a software UI mockup"
+      ],
+      "cta_guidance": [
+        "make the call-to-action prominent and easy to find",
+        "leave a clean QR placeholder area near the CTA"
+      ]
+    },
+    {
+      "id": "trial_class",
+      "name": "免费试听/体验课",
+      "goal": "Encourage parents to book a low-friction trial class.",
+      "positive_blocks": [
+        "friendly children AI art workshop poster for parents and students",
+        "emphasize approachable first experience, curiosity, creative confidence, and visible take-home work",
+        "make the mood warm, bright, safe, and inspiring",
+        "avoid pressure-heavy sales visuals; use a welcoming activity poster tone"
+      ],
+      "cta_guidance": [
+        "make the trial or audition offer feel clear and immediate",
+        "leave a clean QR placeholder area for booking"
+      ]
+    },
+    {
+      "id": "ability_assessment",
+      "name": "AI能力测评预约",
+      "goal": "Prompt parents to scan and book a free AI ability assessment.",
+      "positive_blocks": [
+        "premium AI ability assessment booking poster for children and parents",
+        "emphasize discovering each child's creative potential and AI learning readiness",
+        "show assessment as professional, trustworthy, and fun rather than exam-like",
+        "use a clear promotional poster hierarchy with a strong CTA"
+      ],
+      "cta_guidance": [
+        "make the free assessment offer visually prominent",
+        "reserve a clean QR placeholder for appointment booking"
+      ]
+    },
+    {
+      "id": "course_system",
+      "name": "课程体系介绍",
+      "goal": "Explain the course system and four capability modules in one poster.",
+      "positive_blocks": [
+        "structured AI digital creation course system poster for parents",
+        "show four course pillars as integrated creative outcomes, not dense bullet lists",
+        "make the course path feel systematic, future-facing, and suitable for children",
+        "balance professional education credibility with child-friendly visual appeal"
+      ],
+      "cta_guidance": [
+        "keep the CTA secondary to the course system overview",
+        "reserve a clean QR placeholder area for more details"
+      ]
+    }
+  ],
+  "styles": [
+    {
+      "id": "tech_neon",
+      "name": "科技霓虹",
+      "positive_blocks": [
+        "high-impact blue-purple neon technology poster",
+        "cinematic future classroom lighting, glowing screens, holographic creative interfaces",
+        "rich contrast, electric cyan and magenta accents, premium commercial poster finish",
+        "suitable for AI course enrollment with strong visual energy"
+      ],
+      "typography_blocks": [
+        "main headline uses large custom Chinese 3D lettering with metallic strokes, cyan edge light, and controlled neon glow",
+        "headline should have real advertising title design, not plain system font",
+        "module labels use futuristic glowing badges or integrated display panels",
+        "CTA uses a bold promotional neon ribbon or illuminated banner"
+      ]
+    },
+    {
+      "id": "bright_edu",
+      "name": "明亮少儿教育",
+      "positive_blocks": [
+        "bright premium children education poster",
+        "warm daylight, clean future classroom, colorful but trustworthy parent-facing palette",
+        "happy children creating visible AI artworks, friendly robots or creative tools as supporting elements",
+        "clear, optimistic, safe, and inspiring education brand tone"
+      ],
+      "typography_blocks": [
+        "main headline uses bold friendly Chinese poster lettering with soft dimensional outline",
+        "use high readability and bright color contrast, avoid overly dark or aggressive title effects",
+        "module labels look like polished education badges, stickers, or rounded display labels",
+        "CTA uses a bright enrollment banner that parents can read quickly"
+      ]
+    },
+    {
+      "id": "fantasy_ai_art",
+      "name": "梦幻AI绘图",
+      "positive_blocks": [
+        "fantasy digital art poster for children AI drawing",
+        "show imagination becoming visible artwork: dragons, stars, cute characters, magical landscapes, and glowing tablets",
+        "colorful dreamlike lighting with polished commercial illustration quality",
+        "make creative results feel exciting and attainable for children"
+      ],
+      "typography_blocks": [
+        "main headline uses magical gradient Chinese lettering with luminous outline and subtle sparkle",
+        "do not use plain UI text; make title feel like a fantasy workshop poster",
+        "module labels may look like magic cards, creative stickers, or illustrated badges",
+        "CTA uses a vivid but readable fantasy banner"
+      ]
+    },
+    {
+      "id": "premium_minimal",
+      "name": "高端简洁",
+      "positive_blocks": [
+        "premium clean AI education brand poster",
+        "restrained composition, generous visual breathing room, modern future classroom or digital studio",
+        "high-end parent-facing education brand quality, not noisy promotion",
+        "use refined color accents and clear visual hierarchy"
+      ],
+      "typography_blocks": [
+        "main headline uses elegant bold Chinese display lettering with subtle dimensional highlight",
+        "prioritize readability, balance, and brand credibility over extreme effects",
+        "module labels use clean premium information blocks or tasteful badges",
+        "CTA uses a simple but prominent enrollment strip"
+      ]
+    },
+    {
+      "id": "comic_pop",
+      "name": "漫画热血",
+      "positive_blocks": [
+        "energetic comic-style children creative course poster",
+        "dynamic lines, action panels, manga storyboard elements, bold stickers, and playful visual momentum",
+        "show kids making comics, characters, videos, and digital stories with AI",
+        "exciting but still parent-appropriate and polished"
+      ],
+      "typography_blocks": [
+        "main headline uses large comic poster Chinese lettering with thick outline, impact shadow, and pop highlights",
+        "module labels look like manga stickers, action captions, or comic badges",
+        "CTA uses a punchy promotional sticker or banner",
+        "keep all Chinese text legible despite dynamic effects"
+      ]
+    }
+  ],
+  "layouts": [
+    {
+      "id": "headline_modules_cta",
+      "name": "顶部大标题 + 中部模块 + 底部CTA",
+      "positive_blocks": [
+        "composition: large headline in the upper area, strong subject image in the center, course modules grouped in the middle or side, CTA and QR placeholder at the bottom",
+        "preserve clear hierarchy from headline to subtitle to modules to CTA",
+        "avoid scattering required copy across the whole image"
+      ]
+    },
+    {
+      "id": "central_subject_orbit_modules",
+      "name": "中心主体 + 环绕模块",
+      "positive_blocks": [
+        "composition: child or creative work as central visual subject, course modules arranged around the subject as badges or panels",
+        "headline remains large and readable, module labels support the central subject without covering the face or hands",
+        "CTA and QR placeholder stay in a clean lower area"
+      ]
+    },
+    {
+      "id": "portrait_exhibition",
+      "name": "竖版展架信息流",
+      "positive_blocks": [
+        "composition: portrait poster or standee layout with title at top, child/creative scene in the middle, course highlights in stacked readable sections, CTA near the bottom",
+        "leave enough vertical spacing so Chinese text does not become tiny",
+        "suitable for 80x120 or other vertical printed posters"
+      ]
+    },
+    {
+      "id": "square_social",
+      "name": "方版社媒主视觉",
+      "positive_blocks": [
+        "composition: square social poster with fewer larger text zones and a strong central visual hook",
+        "avoid dense module paragraphs; use compact badges and short labels",
+        "CTA and QR placeholder should not crowd the course module text"
+      ]
+    }
+  ],
+  "text_density": [
+    {
+      "id": "low",
+      "name": "低文字",
+      "positive_blocks": [
+        "low text density: use headline, short subtitle if provided, and one CTA only",
+        "keep text large and highly legible"
+      ],
+      "risk_note": "Best for model-rendered Chinese accuracy."
+    },
+    {
+      "id": "medium",
+      "name": "中文字",
+      "positive_blocks": [
+        "medium text density: headline, subtitle, 3-4 module titles, and CTA are acceptable",
+        "module detail text must be short, readable, and grouped cleanly"
+      ],
+      "risk_note": "Recommended default for enrollment posters."
+    },
+    {
+      "id": "high",
+      "name": "高文字",
+      "positive_blocks": [
+        "high text density: simplify visual clutter and use structured sections so text stays readable",
+        "do not create many tiny labels; enlarge required text even if some decorative elements must be reduced"
+      ],
+      "risk_note": "Higher risk of Chinese text drift; generate more candidates and review carefully."
+    }
+  ],
+  "negative_templates": [
+    {
+      "id": "full_poster",
+      "name": "完整海报负面约束",
+      "blocks": [
+        "do not add any readable text beyond the required copy",
+        "do not rewrite, translate, abbreviate, duplicate, or omit the exact Chinese copy",
+        "do not create pseudo-Chinese, gibberish, malformed glyphs, or typo-like text",
+        "do not generate a scannable QR code; leave only a clean blank QR placeholder area",
+        "do not include phone numbers, prices, fake logos, watermarks, signatures, or brand marks",
+        "do not show business partnership, franchise, school-operation, sales meeting, or to-B cooperation scenes",
+        "do not make children, hands, screens, or faces distorted"
+      ]
+    },
+    {
+      "id": "background_only",
+      "name": "无文字背景负面约束",
+      "blocks": [
+        "do not render any readable text, pseudo-text, QR code, logo, price, phone number, watermark, or signature",
+        "use blank panels or abstract marks only where future text may be placed",
+        "avoid business partnership, franchise, school-operation, or to-B cooperation scenes"
+      ]
+    }
+  ]
+}

@@ -26,6 +26,10 @@ def collect_datas():
             path = baseline_dir / file_name
             if path.exists():
                 datas.append((str(path), "docs/baseline"))
+    prompt_template_dir = ROOT / "docs" / "prompt_templates"
+    if prompt_template_dir.exists():
+        for path in prompt_template_dir.glob("*.json"):
+            datas.append((str(path), "docs/prompt_templates"))
     return datas
 
 

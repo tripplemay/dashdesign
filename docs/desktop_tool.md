@@ -67,8 +67,17 @@ Poster with copy also has a local text style selector:
 
 Complete poster Image2 uses two additional controls:
 
+- Purpose template: chooses the business goal such as enrollment, trial class,
+  assessment booking, or course system introduction.
+- Style template: chooses a professional visual direction such as tech neon,
+  bright education, fantasy AI art, premium minimal, or comic pop.
+- Layout template: controls poster composition such as headline/modules/CTA,
+  central subject, portrait standee, or square social visual.
+- Text density: tells the prompt compiler whether to keep text low, medium, or
+  dense. Dense text increases review risk.
 - Full-poster style: describes the overall art direction, typography style, and
-  commercial poster tone sent to the image model.
+  commercial poster tone sent to the image model. This is optional and is used
+  as an extra requirement on top of the selected templates.
 - Candidates: how many complete poster variants to generate. Use 3-4 for real
   selection; use 1 for a quick API smoke test.
 
@@ -85,6 +94,10 @@ accept pasted text such as `主标题：...`, `副标题：...`, `课程类型�
 and `结语：...`. The tool writes copy warnings into the output package when it
 detects suspicious typos or when a QR code is only drawn as a non-scannable
 placeholder.
+
+In complete poster Image2 mode, the visual prompt is optional. When it is empty,
+DashDesign compiles a professional prompt from the selected templates, current
+project baseline, and poster copy.
 
 For complete poster Image2, always compare generated candidates with
 `expected_text.json` in the output package. Reject candidates with missing,

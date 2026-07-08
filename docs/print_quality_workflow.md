@@ -164,13 +164,15 @@ Pipeline:
 
 1. Load the current to-C project baseline.
 2. Parse the user poster copy into exact expected text.
-3. Prompt `gpt-image-2` to generate the complete poster, including background,
+3. Compile the selected purpose, style, layout, text-density, and negative
+   prompt templates with the project baseline.
+4. Prompt `gpt-image-2` to generate the complete poster, including background,
    headline lettering, module badges, call-to-action, and QR placeholder.
-4. Generate multiple candidates.
-5. Review candidates against `expected_text.json`.
-6. Reject candidates with wrong, missing, duplicated, or extra text.
-7. Add the real QR code only after image approval.
-8. Feed the approved master through Workflow A for print DPI output.
+5. Generate multiple candidates.
+6. Review candidates against `expected_text.json`.
+7. Reject candidates with wrong, missing, duplicated, or extra text.
+8. Add the real QR code only after image approval.
+9. Feed the approved master through Workflow A for print DPI output.
 
 Command:
 
@@ -181,12 +183,18 @@ python3 scripts/full_poster_image2.py \
   --dpi 200 \
   --image-size 1536x1024 \
   --candidates 4 \
+  --purpose-template course_enrollment \
+  --style-template tech_neon \
+  --layout-template headline_modules_cta \
+  --text-density medium \
   --prompt '横版少儿 AI 数字创作招生海报，孩子在未来数字艺术教室中用平板创作，整体要有真实商业海报的标题设计和促销氛围。' \
   --poster-copy $'主标题：驾驭AI浪潮，就是现在！\n副标题：科技革命不等人，AI正在重塑世界，现在是孩子学习AI的黄金窗口期！\n课程类型：\nAI数字绘图：把想象变成精美作品\nAI动态视频创作：让故事动起来\nAI漫剧创编：培养叙事与创作能力\nAI网页&小程序：用作品理解科技\n结语：立即行动，扫码预约免费AI能力测评'
 ```
 
 Add `--execute` after configuring Image API credentials. The package includes
-`expected_text.json` for manual or future OCR-based review.
+`prompt_template_profile.json` and `expected_text.json` for manual or future
+OCR-based review. If `--prompt` is omitted, the workflow builds the prompt from
+the selected templates, current baseline, and poster copy.
 
 See `docs/full_poster_image2_evaluation.md` for the first local evaluation.
 
