@@ -19,6 +19,7 @@ VENV_PYTHON = PROJECT_ROOT / ".venv" / "bin" / "python"
 PYTHON = str(VENV_PYTHON if VENV_PYTHON.exists() else Path(sys.executable))
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
 BASELINE_RELATIVE_PATH = Path("docs") / "baseline" / "baseline.v1.draft.json"
+BASELINE_SCHEMA_RELATIVE_PATH = Path("docs") / "baseline" / "baseline.schema.json"
 PROMPT_TEMPLATE_RELATIVE_PATH = Path("docs") / "prompt_templates" / "full_poster_templates.v1.json"
 
 
@@ -101,6 +102,13 @@ def baseline_path() -> Path:
     if bundled.exists():
         return bundled
     return PROJECT_ROOT / BASELINE_RELATIVE_PATH
+
+
+def baseline_schema_path() -> Path:
+    bundled = APP_ROOT / BASELINE_SCHEMA_RELATIVE_PATH
+    if bundled.exists():
+        return bundled
+    return PROJECT_ROOT / BASELINE_SCHEMA_RELATIVE_PATH
 
 
 def prompt_template_library_path() -> Path:
