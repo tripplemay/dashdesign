@@ -584,19 +584,26 @@ class DashDesignQtApp(QMainWindow):
         params_layout.setSpacing(10)
         self.t2i_mode = QComboBox()
         self.t2i_mode.addItem("无文字背景", "background")
-        self.t2i_mode.addItem("带文字海报", "poster")
+        self.t2i_mode.addItem("带文字海报（本地合成）", "poster")
+        self.t2i_mode.addItem("完整海报 Image2", "full_poster")
         self.t2i_mode.currentIndexChanged.connect(self.sync_text_image_mode)
         self.t2i_text_style = QComboBox()
         self.t2i_text_style.addItem("清爽教育", "clean_edu")
         self.t2i_text_style.addItem("科技霓虹", "tech_neon")
         self.t2i_text_style.setMinimumWidth(130)
+        self.t2i_full_style = QLineEdit(
+            "高端少儿 AI 教育招生海报，真实商业中文标题字效，科技感，明亮，面向家长和孩子"
+        )
+        self.t2i_full_style.setPlaceholderText("完整海报 Image2 模式使用：描述整体海报字体、风格、气质")
+        self.t2i_candidates = QLineEdit("4")
+        self.t2i_candidates.setFixedWidth(76)
         self.t2i_width_cm = QLineEdit("120")
         self.t2i_height_cm = QLineEdit("80")
         self.t2i_dpi = QLineEdit("200")
         for field in (self.t2i_width_cm, self.t2i_height_cm, self.t2i_dpi):
             field.setFixedWidth(76)
         self.t2i_image_size = QComboBox()
-        self.t2i_image_size.addItems(["auto", "1536x1024", "1024x1536", "1024x1024"])
+        self.t2i_image_size.addItems(["auto", "1536x1024", "1024x1536", "1536x1536", "1024x1024"])
         self.t2i_image_size.setMinimumWidth(130)
         self.t2i_quality = QComboBox()
         self.t2i_quality.addItems(["high", "medium", "low", "auto"])
@@ -610,10 +617,19 @@ class DashDesignQtApp(QMainWindow):
         mode_row.addWidget(QLabel("输出类型"))
         mode_row.addWidget(self.t2i_mode)
         mode_row.addSpacing(12)
-        mode_row.addWidget(QLabel("文字风格"))
+        mode_row.addWidget(QLabel("本地文字风格"))
         mode_row.addWidget(self.t2i_text_style)
+        mode_row.addSpacing(12)
+        mode_row.addWidget(QLabel("候选数"))
+        mode_row.addWidget(self.t2i_candidates)
         mode_row.addStretch(1)
         params_layout.addLayout(mode_row)
+
+        full_style_row = QHBoxLayout()
+        full_style_row.setSpacing(8)
+        full_style_row.addWidget(QLabel("整图风格"))
+        full_style_row.addWidget(self.t2i_full_style, 1)
+        params_layout.addLayout(full_style_row)
 
         size_row = QHBoxLayout()
         size_row.setSpacing(8)
@@ -668,10 +684,23 @@ class DashDesignQtApp(QMainWindow):
     def sync_text_image_mode(self) -> None:
         if not hasattr(self, "t2i_mode") or not hasattr(self, "t2i_copy_box"):
             return
-        poster_mode = self.t2i_mode.currentData() == "poster"
+        mode = str(self.t2i_mode.currentData() or "background")
+        poster_mode = mode in {"poster", "full_poster"}
+        full_poster_mode = mode == "full_poster"
         self.t2i_copy_box.setEnabled(poster_mode)
         if hasattr(self, "t2i_text_style"):
-            self.t2i_text_style.setEnabled(poster_mode)
+            self.t2i_text_style.setEnabled(mode == "poster")
+        if hasattr(self, "t2i_full_style"):
+            self.t2i_full_style.setEnabled(full_poster_mode)
+        if hasattr(self, "t2i_candidates"):
+            self.t2i_candidates.setEnabled(full_poster_mode)
+        if hasattr(self, "t2i_prompt"):
+            if full_poster_mode:
+                self.t2i_prompt.setPlaceholderText(
+                    "描述完整海报的画面、主体、风格、字体设计、氛围和构图。完整文案请填写在海报文案区域。"
+                )
+            else:
+                self.t2i_prompt.setPlaceholderText("只描述背景、场景、主体、氛围和构图要求，不粘贴完整海报文案。")
 
     def _make_batch_page(self) -> QWidget:
         page = QWidget()
@@ -963,7 +992,7 @@ class DashDesignQtApp(QMainWindow):
         self.stack.setCurrentIndex(row)
         titles = [
             ("项目基线", "查看当前 C 端海报生成基线，后续文生图会自动引用。"),
-            ("文生图", "基于当前项目基线生成 C 端海报背景，并可输出印刷尺寸。"),
+            ("文生图", "基于当前项目基线生成背景、本地合成海报或完整 Image2 海报。"),
             ("批量印刷", "将根目录或指定目录中的图片输出为印刷规格。"),
             ("GPT 重建", "从源图生成 GPT Image 请求包，必要时直接调用 API。"),
             ("去二维码留空", "只清除指定二维码区域，后期手动添加二维码。"),
@@ -1055,8 +1084,8 @@ class DashDesignQtApp(QMainWindow):
             raise ValueError("请填写文生图提示词")
         mode = str(self.t2i_mode.currentData() or "background")
         poster_copy = self.t2i_copy.toPlainText().strip()
-        if mode == "poster" and not poster_copy:
-            raise ValueError("带文字海报模式需要填写海报文案")
+        if mode in {"poster", "full_poster"} and not poster_copy:
+            raise ValueError("带文字海报或完整海报模式需要填写海报文案")
         try:
             width_cm = float(self.t2i_width_cm.text().strip())
             height_cm = float(self.t2i_height_cm.text().strip())
@@ -1065,10 +1094,20 @@ class DashDesignQtApp(QMainWindow):
             raise ValueError("宽、高和 DPI 必须是数字") from exc
         if width_cm <= 0 or height_cm <= 0 or dpi <= 0:
             raise ValueError("宽、高和 DPI 必须大于 0")
+        try:
+            candidates = int(self.t2i_candidates.text().strip() or "1")
+        except ValueError as exc:
+            raise ValueError("候选数必须是整数") from exc
+        if candidates <= 0:
+            raise ValueError("候选数必须大于 0")
+        full_style = self.t2i_full_style.text().strip()
+        if mode == "full_poster" and not full_style:
+            raise ValueError("完整海报 Image2 模式需要填写整图风格")
 
+        worker_name = "full-poster" if mode == "full_poster" else "text-image"
         command = [
             *worker_prefix(),
-            "text-image",
+            worker_name,
             "--baseline",
             str(baseline_path()),
             "--output-dir",
@@ -1081,15 +1120,25 @@ class DashDesignQtApp(QMainWindow):
             str(dpi),
             "--prompt",
             prompt,
-            "--mode",
-            mode,
-            "--text-style",
-            str(self.t2i_text_style.currentData() or "clean_edu"),
             "--image-size",
             self.t2i_image_size.currentText(),
             "--quality",
             self.t2i_quality.currentText(),
         ]
+        if mode == "full_poster":
+            command += [
+                "--style",
+                full_style,
+                "--candidates",
+                str(candidates),
+            ]
+        else:
+            command += [
+                "--mode",
+                mode,
+                "--text-style",
+                str(self.t2i_text_style.currentData() or "clean_edu"),
+            ]
         if poster_copy:
             command += ["--poster-copy", poster_copy]
         if self.t2i_execute.isChecked():
@@ -1404,6 +1453,7 @@ def run_script_worker(script_name: str, args: list[str]) -> int:
         "batch-style": runtime_root() / "scripts" / "batch_style_preserved_print.py",
         "batch-pil": runtime_root() / "scripts" / "prepare_print_assets.py",
         "text-image": runtime_root() / "scripts" / "text_to_image_print.py",
+        "full-poster": runtime_root() / "scripts" / "full_poster_image2.py",
         "gpt": runtime_root() / "scripts" / "gpt_image_rebuild.py",
         "qr": runtime_root() / "scripts" / "remove_qr_area.py",
     }

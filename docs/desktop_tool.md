@@ -37,14 +37,15 @@ text-to-image prompt injection.
 
 ### 2. Text-to-Image
 
-Calls `scripts/text_to_image_print.py`.
+Calls `scripts/text_to_image_print.py` for background/local-composition modes
+and `scripts/full_poster_image2.py` for complete-poster Image2 mode.
 
 Use this when you want to generate a new poster background from text while
 automatically injecting the current project baseline. The workflow uses only the
 to-C parent/student baseline fields, visual guidelines, and prompt policy. It
 does not inject the raw to-B partnership terms from the source documents.
 
-Two output types are available:
+Three output types are available:
 
 - No-text background: the image model generates only the background/master art.
   Final title, course copy, logo, phone number, QR code, and price remain
@@ -52,6 +53,10 @@ Two output types are available:
 - Poster with copy: the image model still generates only the background layer,
   then DashDesign composes the supplied Chinese poster copy locally. This avoids
   model-made Chinese typos and keeps print text deterministic.
+- Complete poster Image2: the image model generates the full poster, including
+  background, Chinese headline lettering, module badges, CTA, and QR placeholder
+  area. This is the preferred exploration path when visual poster typography is
+  more important than deterministic text-layer editing.
 
 Poster with copy also has a local text style selector:
 
@@ -59,6 +64,13 @@ Poster with copy also has a local text style selector:
   high readability.
 - Tech neon: glowing AI-style headline, neon module cards, and a stronger
   promotional visual tone.
+
+Complete poster Image2 uses two additional controls:
+
+- Full-poster style: describes the overall art direction, typography style, and
+  commercial poster tone sent to the image model.
+- Candidates: how many complete poster variants to generate. Use 3-4 for real
+  selection; use 1 for a quick API smoke test.
 
 If `Execute API` is not checked, the tool creates an offline package containing
 the final prompt, baseline context, request JSON, and generation record. If
@@ -73,6 +85,11 @@ accept pasted text such as `主标题：...`, `副标题：...`, `课程类型�
 and `结语：...`. The tool writes copy warnings into the output package when it
 detects suspicious typos or when a QR code is only drawn as a non-scannable
 placeholder.
+
+For complete poster Image2, always compare generated candidates with
+`expected_text.json` in the output package. Reject candidates with missing,
+wrong, duplicated, rewritten, or extra readable text. Add the real scannable QR
+code only after the poster image is approved.
 
 ### 3. Batch Print
 
