@@ -32,7 +32,6 @@ def text_image_form(**overrides: object) -> TextImageForm:
         dpi="200",
         candidates="4",
         full_style="",
-        text_style="clean_edu",
         purpose_template="course_enrollment",
         style_template="tech_neon",
         layout_template="headline_modules_cta",
@@ -78,8 +77,9 @@ class TestTextImageCommand:
         with pytest.raises(ValueError, match="提示词"):
             build_text_image_command(text_image_form(prompt="  "))
 
-    def test_poster_mode_requires_copy(self) -> None:
-        with pytest.raises(ValueError, match="海报文案"):
+    def test_deprecated_poster_mode_rejected(self) -> None:
+        # 带文字海报（本地合成）已废弃并从工具移除
+        with pytest.raises(ValueError, match="未知输出类型"):
             build_text_image_command(text_image_form(mode="poster"))
 
     def test_full_poster_allows_empty_prompt(self) -> None:
@@ -124,10 +124,14 @@ class TestTextImageCommand:
 
     def test_poster_copy_is_forwarded(self) -> None:
         command, _, _ = build_text_image_command(
-            text_image_form(mode="poster", poster_copy="主标题\n副标题")
+            text_image_form(mode="full_poster", poster_copy="主标题\n副标题")
         )
         assert "--poster-copy" in command
         assert command[command.index("--poster-copy") + 1] == "主标题\n副标题"
+
+    def test_background_mode_has_no_text_style(self) -> None:
+        command, _, _ = build_text_image_command(text_image_form())
+        assert "--text-style" not in command
 
 
 class TestBatchCommand:

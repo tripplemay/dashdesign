@@ -40,7 +40,6 @@ class TextImageForm:
     dpi: str
     candidates: str
     full_style: str
-    text_style: str
     purpose_template: str
     style_template: str
     layout_template: str
@@ -57,11 +56,14 @@ def build_text_image_command(form: TextImageForm):
     output_dir = Path(form.output_dir).expanduser()
     prompt = form.prompt.strip()
     mode = form.mode or "background"
+    if mode not in {"background", "full_poster"}:
+        # 带文字海报（本地合成）模式已于 2026-07 废弃并从工具中移除。
+        raise ValueError(f"未知输出类型：{mode}")
     if not prompt and mode != "full_poster":
         raise ValueError("请填写文生图提示词")
     poster_copy = form.poster_copy.strip()
-    if mode in {"poster", "full_poster"} and not poster_copy:
-        raise ValueError("带文字海报或完整海报模式需要填写海报文案")
+    if mode == "full_poster" and not poster_copy:
+        raise ValueError("完整海报模式需要填写海报文案")
     try:
         width_cm = float(form.width_cm.strip())
         height_cm = float(form.height_cm.strip())
@@ -119,12 +121,7 @@ def build_text_image_command(form: TextImageForm):
             str(candidates),
         ]
     else:
-        command += [
-            "--mode",
-            mode,
-            "--text-style",
-            form.text_style or "clean_edu",
-        ]
+        command += ["--mode", mode]
     if poster_copy:
         command += ["--poster-copy", poster_copy]
     if form.execute:

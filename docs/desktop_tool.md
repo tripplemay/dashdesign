@@ -45,25 +45,21 @@ automatically injecting the current project baseline. The workflow uses only the
 to-C parent/student baseline fields, visual guidelines, and prompt policy. It
 does not inject the raw to-B partnership terms from the source documents.
 
-Three output types are available:
+Two output types are available:
 
 - No-text background: the image model generates only the background/master art.
   Final title, course copy, logo, phone number, QR code, and price remain
   outside the model output.
-- Poster with copy: the image model still generates only the background layer,
-  then DashDesign composes the supplied Chinese poster copy locally. This avoids
-  model-made Chinese typos and keeps print text deterministic.
 - Complete poster Image2: the image model generates the full poster, including
   background, Chinese headline lettering, module badges, CTA, and QR placeholder
   area. This is the preferred exploration path when visual poster typography is
   more important than deterministic text-layer editing.
 
-Poster with copy also has a local text style selector:
-
-- Clean education: clearer enrollment poster typography, white panels, and
-  high readability.
-- Tech neon: glowing AI-style headline, neon module cards, and a stronger
-  promotional visual tone.
+> Deprecated (2026-07): the "poster with copy" mode (background generation plus
+> local Chinese typography composition) produced unsatisfactory results and has
+> been removed from the desktop client. `scripts/text_to_image_print.py --mode
+> poster` still exists for command-line experiments, but the GUI no longer
+> exposes it.
 
 Complete poster Image2 uses two additional controls:
 
