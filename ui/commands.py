@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app_runtime import (
-    baseline_path,
     prompt_template_library_path,
     runtime_model_dir,
     runtime_tool_path,
@@ -32,6 +31,7 @@ def api_env(base_url: str, api_key: str) -> dict[str, str]:
 @dataclass(frozen=True)
 class TextImageForm:
     output_dir: str
+    baseline_path: str
     prompt: str
     mode: str
     poster_copy: str
@@ -79,12 +79,15 @@ def build_text_image_command(form: TextImageForm):
         raise ValueError("候选数必须大于 0")
     full_style = form.full_style.strip()
 
+    baseline = form.baseline_path.strip()
+    if not baseline:
+        raise ValueError("未找到可用的项目基线")
     worker_name = "full-poster" if mode == "full_poster" else "text-image"
     command = [
         *worker_prefix(),
         worker_name,
         "--baseline",
-        str(baseline_path()),
+        baseline,
         "--output-dir",
         str(output_dir),
         "--width-cm",

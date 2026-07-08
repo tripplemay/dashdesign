@@ -23,8 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app_runtime import PROJECT_ROOT, baseline_path
-from ui import api_config
+from app_runtime import PROJECT_ROOT
+from ui import api_config, baseline_service
 from ui.commands import TextImageForm
 from ui.utils import scrollable_page_layout
 from ui.widgets import PathField
@@ -222,16 +222,21 @@ class TextImagePage(QWidget):
             str(PROJECT_ROOT / "workflow_samples" / "text_to_image_print_qt"),
             "dir",
         )
-        baseline_label = QLabel(f"基线文件：{baseline_path()}")
-        baseline_label.setObjectName("Subtitle")
-        baseline_label.setWordWrap(True)
-        baseline_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.baseline_label = QLabel("")
+        self.baseline_label.setObjectName("Subtitle")
+        self.baseline_label.setWordWrap(True)
+        self.baseline_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         path_layout.addWidget(self.t2i_output)
-        path_layout.addWidget(baseline_label)
+        path_layout.addWidget(self.baseline_label)
         layout.addWidget(paths)
 
         layout.addStretch(1)
+        self.refresh_active_baseline()
         self.sync_text_image_mode()
+
+    def refresh_active_baseline(self) -> None:
+        info = baseline_service.active_project_id()
+        self.baseline_label.setText(f"当前项目基线：{info or '（未选择）'} · {baseline_service.active_baseline_path()}")
 
     def confirm_run(self, window) -> bool:  # type: ignore[no-untyped-def]
         if not api_config.has_api_key():
@@ -272,6 +277,7 @@ class TextImagePage(QWidget):
     def form(self) -> TextImageForm:
         return TextImageForm(
             output_dir=self.t2i_output.text(),
+            baseline_path=str(baseline_service.active_baseline_path()),
             prompt=self.t2i_prompt.toPlainText(),
             mode=str(self.t2i_mode.currentData() or "background"),
             poster_copy=self.t2i_copy.toPlainText(),

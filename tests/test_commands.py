@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from app_runtime import baseline_path, prompt_template_library_path
+from app_runtime import prompt_template_library_path
 from ui.commands import (
     BatchForm,
     GptForm,
@@ -24,6 +24,7 @@ from ui.commands import (
 def text_image_form(**overrides: object) -> TextImageForm:
     base = TextImageForm(
         output_dir="/tmp/out",
+        baseline_path="/tmp/baseline.v1.json",
         prompt="明亮教室",
         mode="background",
         poster_copy="",
@@ -64,7 +65,7 @@ class TestTextImageCommand:
         assert "--worker" in command
         assert "text-image" in command
         assert "--baseline" in command
-        assert command[command.index("--baseline") + 1] == str(baseline_path())
+        assert command[command.index("--baseline") + 1] == "/tmp/baseline.v1.json"
         assert "--mode" in command
         assert command[command.index("--mode") + 1] == "background"
         assert "--postprocess-print" in command
