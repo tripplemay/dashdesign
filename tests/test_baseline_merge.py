@@ -93,6 +93,20 @@ class TestExtract:
         assert "保证考上名校" not in texts  # 幻觉引文被接地校验拦掉
         assert result["document"]["document_id"]
 
+    def test_whitespace_quote_not_grounded(self, tmp_path: Path, bundled_baseline: dict) -> None:
+        parsed = self._parsed(tmp_path, "孩子提升表达力。")
+
+        def fake_chat(messages, response_format):  # noqa: ANN001
+            return json.dumps({
+                "source_context_hint": "manual",
+                "evidence": [{"id": "ev_ws", "section": "src.txt", "quote": "   "}],
+                "candidates": [{"target": "consumer_baseline.core_messages",
+                                "text": "编造内容", "confidence": 0.9, "evidence": ["ev_ws"]}],
+            }, ensure_ascii=False)
+
+        result = extract_candidates(parsed, bundled_baseline, fake_chat)
+        assert result["candidates"] == []  # 纯空白 quote 不算接地
+
 
 # --- merge classification + apply -----------------------------------
 class TestMerge:

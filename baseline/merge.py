@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List
 
-from baseline import versioning
+from baseline import governance, versioning
 
 CONSUMER_TARGETS = (
     "consumer_baseline.core_messages",
@@ -23,11 +23,6 @@ CONSUMER_TARGETS = (
 B_SIDE_TARGET = "source_facts.business_terms"
 _ALL_TARGETS = CONSUMER_TARGETS + (B_SIDE_TARGET,)
 
-# forbidden-claim 触发词（承诺升学/技能/收益类），命中即需人工，绝不自动进 C 端
-_FORBIDDEN_TRIGGERS = (
-    "保证", "承诺", "一定", "100%", "百分百", "包过", "包升学", "包就业",
-    "稳赚", "收益", "回报", "必然", "确保",
-)
 _MIN_CONFIDENCE = 0.6
 
 # governance 分类
@@ -92,12 +87,13 @@ def _existing_texts(baseline: Dict[str, Any], target: str) -> set:
 def _classify(target: str, text: str, confidence: float, blocked: List[str]) -> "tuple[str, bool, str]":
     if target == B_SIDE_TARGET:
         return B_SIDE, True, "记录为 B 端事实，仅供溯源，不进入 C 端出图"
+    norm_text = governance._norm(text)
     for kw in blocked:
-        if kw and kw in text:
+        if kw and governance._norm(kw) in norm_text:
             return BLOCKED, False, f"命中禁用词“{kw}”，不可进入 C 端；如需保留请改入 B 端溯源"
-    for trigger in _FORBIDDEN_TRIGGERS:
-        if trigger in text:
-            return FORBIDDEN, False, f"疑似违规承诺（含“{trigger}”），需人工确认后才可采纳"
+    for trigger in governance.PROMISE_TRIGGERS:
+        if governance._norm(trigger) in norm_text:
+            return FORBIDDEN, False, f"疑似违规承诺（含“{trigger}”），违反 claims_policy，需人工确认"
     if confidence < _MIN_CONFIDENCE:
         return LOW_CONF, False, "抽取置信度较低，请人工核对原文后再采纳"
     return OK, True, ""

@@ -74,7 +74,10 @@ class BaselineRepository:
         meta_path = self._meta_path(baseline_id)
         if not meta_path.exists():
             return None
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None  # 损坏的项目跳过，不阻断其余项目/启动播种
         return ProjectInfo(
             baseline_id=baseline_id,
             name=str(meta.get("name", baseline_id)),
@@ -89,6 +92,7 @@ class BaselineRepository:
         if self._meta_path(baseline_id).exists():
             raise BaselineError(f"项目已存在：{baseline_id}")
         self._require_valid(baseline)
+        self._require_clean(baseline)  # 初始活跃版本即会喂给 C 端出图
         version = str(baseline["version"])
         self._versions_dir(baseline_id).mkdir(parents=True, exist_ok=True)
         self._documents_dir(baseline_id).mkdir(parents=True, exist_ok=True)
@@ -117,6 +121,8 @@ class BaselineRepository:
     def set_active_version(self, baseline_id: str, version: str) -> None:
         if not self.version_path(baseline_id, version).exists():
             raise BaselineError(f"版本不存在：{baseline_id}@{version}")
+        # 活跃版本会喂给 to-C 出图，即便是草稿也必须通过治理检查。
+        self._require_clean(self.load_version(baseline_id, version))
         info = self.get_project(baseline_id)
         name = info.name if info else baseline_id
         self._write_meta(baseline_id, name=name, active_version=version)
@@ -183,6 +189,11 @@ class BaselineRepository:
         errors = validation_errors(baseline)
         if errors:
             raise ValidationError(errors)
+
+    def _require_clean(self, baseline: dict) -> None:
+        issues = governance.governance_issues(baseline)
+        if issues:
+            raise GovernanceError(issues)
 
     def _write_meta(self, baseline_id: str, name: str, active_version: Optional[str]) -> None:
         self._project_dir(baseline_id).mkdir(parents=True, exist_ok=True)

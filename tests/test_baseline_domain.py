@@ -73,6 +73,25 @@ class TestGovernance:
         assert blocked in hits
         assert governance.governance_issues(dirty)
 
+    def test_forbidden_claim_in_consumer_copy_detected(self, bundled_baseline: dict) -> None:
+        dirty = copy.deepcopy(bundled_baseline)
+        dirty["consumer_baseline"]["core_messages"].append(
+            {"text": "保证孩子升入重点高中", "evidence": []}
+        )
+        assert governance.forbidden_claim_hits(dirty)  # 承诺型触发词命中
+        assert any("承诺" in m for m in governance.governance_issues(dirty))
+
+    def test_blocked_keyword_in_positive_visual_field_detected(self, bundled_baseline: dict) -> None:
+        dirty = copy.deepcopy(bundled_baseline)
+        blocked = dirty["consumer_baseline"]["blocked_keywords"][0]
+        # 正向 prompt 层（会进出图）出现禁用词也要被抓
+        dirty["visual_guidelines"]["recommended_scenes"].append(f"{blocked}主题场景")
+        assert blocked in governance.blocked_keyword_hits(dirty)
+
+    def test_avoid_scenes_not_falsely_flagged(self, bundled_baseline: dict) -> None:
+        # avoid_scenes 合法点名被禁概念，不应误报（保持干净基线通过）
+        assert governance.governance_issues(bundled_baseline) == []
+
 
 class TestRepository:
     def test_create_list_and_active(self, tmp_path: Path, bundled_baseline: dict) -> None:
@@ -135,6 +154,32 @@ class TestRepository:
         version = repo.save_draft(draft)
         with pytest.raises(GovernanceError):
             repo.publish(bid, version)
+
+    def test_publish_blocked_by_forbidden_claim(self, tmp_path: Path, bundled_baseline: dict) -> None:
+        repo = BaselineRepository(tmp_path)
+        base = copy.deepcopy(bundled_baseline)
+        bid = base["baseline_id"]
+        repo.create_project(base)
+        draft = repo.new_draft(bid, base["version"])
+        draft["consumer_baseline"]["core_messages"].append(
+            {"text": "承诺一定考上名校", "evidence": []}
+        )
+        version = repo.save_draft(draft)
+        with pytest.raises(GovernanceError):
+            repo.publish(bid, version)
+
+    def test_set_active_gated_by_governance(self, tmp_path: Path, bundled_baseline: dict) -> None:
+        repo = BaselineRepository(tmp_path)
+        base = copy.deepcopy(bundled_baseline)
+        bid = base["baseline_id"]
+        repo.create_project(base)
+        draft = repo.new_draft(bid, base["version"])
+        draft["consumer_baseline"]["core_messages"].append(
+            {"text": "保证升学", "evidence": []}
+        )
+        bad = repo.save_draft(draft)
+        with pytest.raises(GovernanceError):
+            repo.set_active_version(bid, bad)  # 不干净的版本不能设为活跃（会喂 C 端出图）
 
     def test_add_document(self, tmp_path: Path, bundled_baseline: dict) -> None:
         repo = BaselineRepository(tmp_path)

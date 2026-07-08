@@ -129,7 +129,10 @@ def _ground(data: Dict[str, Any], parsed: ParsedDocument, document_meta: Dict[st
     grounded_ev: Dict[str, Dict[str, Any]] = {}
     for ev in data.get("evidence", []) or []:
         quote = str(ev.get("quote", ""))
-        if quote and _normalize(quote) in haystack:
+        norm_quote = _normalize(quote)
+        # 至少 4 个非空白字符才算接地——否则空/纯空白 quote 归一为空串会
+        # 因 "" in haystack 恒真而被误判为已接地。
+        if len(norm_quote) >= 4 and norm_quote in haystack:
             ev = dict(ev)
             ev["document_id"] = doc_id
             grounded_ev[str(ev.get("id"))] = ev

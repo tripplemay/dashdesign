@@ -337,13 +337,16 @@ class BaselinePage(QWidget):
         )
         if not path:
             return
+        self._merge_project = project_id  # 捕获发起时的项目，回调不再重读下拉
         self._merge_source_path = Path(path)
         self._merge_current = baseline_service.repository().load_version(project_id, version)
         self._merge_signals = MergeSignals(self)
         self._merge_signals.done.connect(self._on_merge_ready)
         self._merge_signals.failed.connect(self._on_merge_failed)
+        self.merge_button.setEnabled(False)  # 防止在途重复点击覆盖状态
         self._merge_progress = QProgressDialog("正在分析文档并生成合并建议…", None, 0, 0, self)
         self._merge_progress.setWindowTitle("文档合并")
+        self._merge_progress.setWindowModality(Qt.WindowModality.ApplicationModal)
         self._merge_progress.setMinimumDuration(0)
         self._merge_progress.setCancelButton(None)
         self._merge_progress.show()
@@ -358,11 +361,13 @@ class BaselinePage(QWidget):
     def _on_merge_failed(self, message: str) -> None:
         if getattr(self, "_merge_progress", None):
             self._merge_progress.close()
+        self.merge_button.setEnabled(True)
         QMessageBox.warning(self, "文档分析失败", message)
 
     def _on_merge_ready(self, report: "merge.MergeReport") -> None:
         if getattr(self, "_merge_progress", None):
             self._merge_progress.close()
+        self.merge_button.setEnabled(True)
         if not report.changes:
             QMessageBox.information(self, "无新增内容", "未从该文档中提取到可合并的新信息。")
             return
@@ -373,7 +378,7 @@ class BaselinePage(QWidget):
             QMessageBox.information(self, "未采纳任何内容", "没有采纳任何候选，未生成草稿。")
             return
         repo = baseline_service.repository()
-        project_id = self._current_project()
+        project_id = self._merge_project  # 用发起时捕获的项目，避免中途切换错配
         draft = merge.apply_report(
             self._merge_current, report, today_str(), repo.list_versions(project_id)
         )
@@ -383,7 +388,12 @@ class BaselinePage(QWidget):
         except BaselineError as exc:
             QMessageBox.warning(self, "生成草稿失败", str(exc))
             return
-        self._reload_versions()
+        # 若合并期间切到了别的项目，切回发起项目再刷新版本列表
+        if self._current_project() != project_id:
+            baseline_service.set_active_project(project_id)
+            self.reload()
+        else:
+            self._reload_versions()
         idx = self.version_combo.findData(new_version)
         if idx >= 0:
             self.version_combo.setCurrentIndex(idx)
