@@ -10,6 +10,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageOps
 
+import progress
+
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -137,16 +139,21 @@ def parse_reference_size(value: str | None) -> tuple[int, int] | None:
 
 def main() -> None:
     args = build_parser().parse_args()
+    progress.plan(["换算清除区域", "打开图片", "去除二维码区域", "保存成品与预览", "完成"])
+    progress.stage(1)
     reference_size = parse_reference_size(args.reference_size)
 
+    progress.stage(2)
     with Image.open(args.input) as raw:
         dpi = raw.info.get("dpi")
         icc = raw.info.get("icc_profile")
         image = ImageOps.exif_transpose(raw).convert("RGB")
 
+    progress.stage(3)
     box = scale_box(args.box, reference_size, image.size)
     output = remove_area(image, box, args.margin_ratio, args.inpaint_radius)
 
+    progress.stage(4)
     destination = args.output or args.output_dir / f"{args.input.stem}_no_qr{args.input.suffix}"
     save_image(output, args.input, destination, dpi, icc)
 
@@ -160,6 +167,9 @@ def main() -> None:
     print(review_path)
     print(f"image_size={image.width}x{image.height}")
     print(f"removal_box={box[0]},{box[1]},{box[2]},{box[3]}")
+
+    progress.stage(5)
+    progress.done(str(destination))
 
     image.close()
     output.close()

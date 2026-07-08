@@ -18,6 +18,8 @@ from pathlib import Path
 
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
+import progress
+
 from prepare_print_assets import (
     IMAGE_EXTENSIONS,
     SourceSpec,
@@ -291,22 +293,33 @@ def main() -> None:
     args = build_parser().parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    progress.plan(["扫描图片", "逐张高清化处理", "生成审计报告", "生成缩略图联系表", "完成"])
+    progress.stage(1)
     specs = discover_sources(args.input_dir, args.only)
     if not specs:
         raise SystemExit("No root-level image files with parseable physical dimensions were found.")
 
+    progress.stage(2)
+    total = len(specs)
     rows: list[dict[str, str | int | float]] = []
     review_paths: list[Path] = []
     for index, spec in enumerate(specs, start=1):
-        print(f"[{index}/{len(specs)}] {spec.path.name}", flush=True)
+        progress.step(spec.path.name, index, total, "start")
+        print(f"[{index}/{total}] {spec.path.name}", flush=True)
         row = process_one(spec, args)
         rows.append(row)
         review_paths.append(Path(row["review"]))
+        backend = "超分高清化" if str(row.get("backend", "")).startswith("realesrgan") else "基础缩放"
+        progress.step(f"{spec.path.name}（{backend}）", index, total, "ok")
 
+    progress.stage(3)
     write_report(rows, args.output_dir, args.dpi)
+    progress.stage(4)
     build_contact_sheet(review_paths, args.output_dir / "review" / "contact_sheet.jpg")
+    progress.stage(5)
     if not args.keep_masters:
         shutil.rmtree(args.output_dir / "_masters", ignore_errors=True)
+    progress.done(str(args.output_dir))
 
 
 if __name__ == "__main__":

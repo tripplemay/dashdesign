@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import stat
 import textwrap
@@ -22,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageOps
+
+import progress
 
 from image_api_client import execute_image_request
 from prepare_print_assets import parse_size_from_name, target_pixels
@@ -303,10 +306,22 @@ def build_package(
     execute: bool,
     api_mode: str,
 ) -> Path:
+    _stages = ["解析源图", "生成预览与请求包"]
+    if execute:
+        _stages.append("调用图像 API")
+    _stages.append("写状态与完成")
+    progress.plan(_stages)
+
+    def _advance(label: str) -> None:
+        if label in _stages:
+            progress.stage(_stages.index(label) + 1)
+
+    _advance("解析源图")
     profile = build_profile(source, print_dpi)
     package_dir = output_dir / f"{slugify_filename(source.name)}_{api_mode}"
     package_dir.mkdir(parents=True, exist_ok=True)
 
+    _advance("生成预览与请求包")
     preview_path = package_dir / "source_preview.jpg"
     save_preview(source, preview_path)
     source_copy = package_dir / source.name
@@ -364,6 +379,7 @@ def build_package(
         ),
     }
     if execute:
+        _advance("调用图像 API")
         status["image_generation"] = execute_image_request(
             source,
             payload,
@@ -376,6 +392,7 @@ def build_package(
             "reason": "OPENAI_API_KEY is not set. Run run_gpt_image_generation.sh after configuring it.",
         }
 
+    _advance("写状态与完成")
     write_json(package_dir / "status.json", status)
 
     readme = textwrap.dedent(
@@ -402,6 +419,7 @@ def build_package(
     ).strip()
     (package_dir / "README.md").write_text(readme + "\n", encoding="utf-8")
 
+    progress.done(str(package_dir))
     return package_dir
 
 

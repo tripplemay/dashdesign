@@ -16,6 +16,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import progress
+
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 
@@ -292,17 +294,26 @@ def main() -> int:
     input_dir = args.input_dir.resolve()
     output_dir = args.output_dir.resolve()
 
+    progress.plan(["扫描图片", "逐张处理", "生成审计报告", "完成"])
+    progress.stage(1)
     specs = discover_sources(input_dir, args.only)
     if not specs:
         raise SystemExit(f"No image files with parseable dimensions found in {input_dir}")
 
+    progress.stage(2)
+    total = len(specs)
     rows = []
     for index, spec in enumerate(specs, start=1):
-        print(f"[{index}/{len(specs)}] {spec.path.name}")
+        progress.step(spec.path.name, index, total, "start")
+        print(f"[{index}/{total}] {spec.path.name}", flush=True)
         rows.append(process_one(spec, output_dir, args.dpi, args.aspect_tolerance))
+        progress.step(spec.path.name, index, total, "ok")
 
+    progress.stage(3)
     write_report(rows, output_dir, args.dpi)
+    progress.stage(4)
     print(f"Done. Output written to {output_dir}")
+    progress.done(str(output_dir))
     return 0
 
 

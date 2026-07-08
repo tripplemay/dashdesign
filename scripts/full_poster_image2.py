@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import progress
+
 from image_api_client import execute_image_generation
 from prompt_template_compiler import (
     DEFAULT_TEMPLATE_LIBRARY,
@@ -228,6 +230,8 @@ def build_package(
     if not poster_copy_text.strip():
         raise ValueError("Full-poster mode requires poster copy")
 
+    progress.plan(["加载基线与模板", "编译提示词与素材", "生成候选海报", "汇总完成"])
+    progress.stage(1)
     baseline = load_baseline(baseline_path)
     template_library = load_template_library(template_library_path)
     template_profile = compile_prompt_template_profile(
@@ -257,6 +261,7 @@ def build_package(
         terms = "、".join(blocked_terms)
         raise ValueError(f"整图海报提示词包含当前 C 端基线禁用词：{terms}")
 
+    progress.stage(2)
     image_size = resolve_image_size(width_cm, height_cm, requested_image_size)
     prompt = build_full_poster_prompt(
         baseline,
@@ -327,7 +332,9 @@ def build_package(
         },
     }
 
+    progress.stage(3)
     for index in range(1, candidates + 1):
+        progress.step(f"候选 {index}/{candidates}", index, candidates, "start")
         candidate_dir = package_dir / f"candidate_{index:02d}"
         candidate_dir.mkdir(parents=True, exist_ok=True)
         payload = build_payload(model, prompt, image_size, quality, output_format)
@@ -379,6 +386,12 @@ def build_package(
                 print_status = {"candidate": index, **prepare_print_output(candidate_dir / master_name, print_output, width_cm, height_cm, dpi)}
             status["print_output"].append(print_status)
 
+        candidate_state = {"error": "fail", "skipped": "skip"}.get(
+            str(candidate_status.get("status")), "ok"
+        )
+        progress.step(f"候选 {index}/{candidates}", index, candidates, candidate_state)
+
+    progress.stage(4)
     write_json(package_dir / "status.json", status)
     readme = textwrap.dedent(
         f"""
@@ -397,6 +410,7 @@ def build_package(
         """
     ).strip()
     (package_dir / "README.md").write_text(readme + "\n", encoding="utf-8")
+    progress.done(str(package_dir))
     return package_dir
 
 

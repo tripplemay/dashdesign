@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.util
+import io
+from contextlib import redirect_stdout
+from pathlib import Path
+
+import pytest
+
 from ui.progress import (
     FAIL,
     OK,
@@ -11,6 +18,63 @@ from ui.progress import (
     ProgressModel,
     parse_progress_line,
 )
+
+_EMITTER_PATH = Path(__file__).resolve().parent.parent / "scripts" / "progress.py"
+
+
+def _load_emitter():
+    spec = importlib.util.spec_from_file_location("dashdesign_progress_emitter", _EMITTER_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    return module
+
+
+class TestEmitter:
+    def test_silent_without_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DASHDESIGN_PROGRESS", raising=False)
+        emitter = _load_emitter()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            emitter.plan(["a", "b"])
+            emitter.stage(1)
+            emitter.done("/tmp")
+        assert buf.getvalue() == ""
+
+    def test_emits_parseable_lines_with_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DASHDESIGN_PROGRESS", "1")
+        emitter = _load_emitter()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            emitter.plan(["扫描", "处理"])
+            emitter.stage(2)
+            emitter.step("海报.jpg", 1, 5, "ok")
+            emitter.done("/tmp/out")
+        events = [parse_progress_line(line) for line in buf.getvalue().splitlines()]
+        events = [e for e in events if e is not None]
+        assert [e.kind for e in events] == ["plan", "stage", "step", "done"]
+        assert events[0].labels == ["扫描", "处理"]
+        assert events[1].index == 2
+        assert events[2].label == "海报.jpg" and events[2].total == 5 and events[2].state == "ok"
+        assert events[3].label == "/tmp/out"
+
+    def test_emitter_output_round_trips_through_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DASHDESIGN_PROGRESS", "1")
+        emitter = _load_emitter()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            emitter.plan(["扫描", "处理", "完成"])
+            emitter.stage(2)
+            emitter.step("x", 1, 3, "start")
+            emitter.step("x", 1, 3, "ok")
+        model = ProgressModel()
+        for line in buf.getvalue().splitlines():
+            event = parse_progress_line(line)
+            if event is not None:
+                model.apply(event)
+        assert model.stage_count() == 3
+        assert model.stages[0].status == OK
+        assert model.stages[1].status == RUNNING
+        assert model.step_total == 3 and model.step_done == 1
 
 
 class TestParse:

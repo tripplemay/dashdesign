@@ -17,6 +17,8 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
+import progress
+
 from image_api_client import execute_image_generation
 from prepare_print_assets import (
     aspect_delta_percent,
@@ -1281,6 +1283,19 @@ def build_package(
     if not user_prompt.strip():
         raise ValueError("Prompt must not be empty")
 
+    _stages = ["读取项目基线", "生成提示词", "写请求包"]
+    if execute:
+        _stages.append("调用图像 API")
+        if postprocess_print:
+            _stages.append("印刷后处理")
+    _stages.append("完成")
+    progress.plan(_stages)
+
+    def _advance(label: str) -> None:
+        if label in _stages:
+            progress.stage(_stages.index(label) + 1)
+
+    _advance("读取项目基线")
     baseline = load_baseline(baseline_path)
     poster_copy = parse_poster_copy(poster_copy_text, headline, subtitle, modules, cta)
     copy_warnings = analyze_poster_copy(poster_copy) if mode == MODE_POSTER else []
@@ -1302,6 +1317,7 @@ def build_package(
         terms = "、".join(blocked_terms)
         raise ValueError(f"文生图提示词包含当前 C 端基线禁用词：{terms}")
 
+    _advance("生成提示词")
     image_size = resolve_image_size(width_cm, height_cm, requested_image_size)
     context_source = prompt_context_source(baseline)
     context_hash = profile_hash(context_source)
@@ -1331,6 +1347,7 @@ def build_package(
         f"{cm_label(width_cm)}乘以{cm_label(height_cm)}_文生图海报.jpg"
     )
 
+    _advance("写请求包")
     (package_dir / "prompt.md").write_text(prompt, encoding="utf-8")
     write_json(package_dir / "baseline_context.json", context_source)
     write_json(package_dir / "image_generation_request.json", payload)
@@ -1380,6 +1397,7 @@ def build_package(
         "copy_warnings": copy_warnings,
     }
     if execute:
+        _advance("调用图像 API")
         status["image_generation"] = execute_image_generation(payload, package_dir / master_name)
         if (
             isinstance(status["image_generation"], dict)
@@ -1411,6 +1429,7 @@ def build_package(
                             "reason": "print output was skipped because master orientation mismatched target",
                         }
                 else:
+                    _advance("印刷后处理")
                     status["print_output"] = prepare_print_output(
                         package_dir / master_name,
                         print_background_output,
@@ -1457,6 +1476,7 @@ def build_package(
                     "reason": "master image was not generated",
                 }
 
+    _advance("完成")
     write_json(package_dir / "status.json", status)
     readme = textwrap.dedent(
         f"""
@@ -1481,6 +1501,7 @@ def build_package(
         """
     ).strip()
     (package_dir / "README.md").write_text(readme + "\n", encoding="utf-8")
+    progress.done(str(package_dir))
     return package_dir
 
 
