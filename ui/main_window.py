@@ -52,7 +52,7 @@ from ui.pages import BaselinePage, BatchPage, GptPage, QrPage, TextImagePage
 from ui.progress import ProgressModel, parse_progress_line
 from ui.updater import UpdateSignals, fetch_update_manifest
 from ui.utils import open_path
-from ui.widgets import ApiSettingsDialog, ImagePreview, InfoBanner, ProgressPanel
+from ui.widgets import ImagePreview, InfoBanner, ProgressPanel, SettingsDialog
 
 
 class DashDesignQtApp(QMainWindow):
@@ -108,8 +108,9 @@ class DashDesignQtApp(QMainWindow):
         self.export_log_action = QAction("导出运行日志…", self)
         self.export_log_action.triggered.connect(self.export_log)
 
-        self.api_settings_action = QAction("API 设置…", self)
-        self.api_settings_action.triggered.connect(self.open_api_settings)
+        self.settings_action = QAction("设置…", self)
+        self.settings_action.setShortcut(QKeySequence.StandardKey.Preferences)
+        self.settings_action.triggered.connect(self.open_settings)
 
         self.check_update_action = QAction("检查更新", self)
         self.check_update_action.triggered.connect(lambda: self.check_for_updates(silent=False))
@@ -121,7 +122,7 @@ class DashDesignQtApp(QMainWindow):
     def _build_menu(self) -> None:
         self.menuBar().setNativeMenuBar(True)
         file_menu = self.menuBar().addMenu("文件")
-        file_menu.addAction(self.api_settings_action)
+        file_menu.addAction(self.settings_action)
         file_menu.addAction(self.open_project_action)
         file_menu.addAction(self.open_output_action)
         file_menu.addAction(self.export_log_action)
@@ -137,6 +138,7 @@ class DashDesignQtApp(QMainWindow):
         self.theme_action_group = QActionGroup(self)
         self.theme_action_group.setExclusive(True)
         current_mode = theme.manager().mode() if theme.manager() is not None else "system"
+        self._theme_actions: "dict[str, QAction]" = {}
         for mode, label in (("system", "跟随系统"), ("light", "浅色"), ("dark", "深色")):
             action = QAction(label, self)
             action.setCheckable(True)
@@ -144,6 +146,7 @@ class DashDesignQtApp(QMainWindow):
             action.triggered.connect(lambda checked=False, m=mode: self._set_theme_mode(m))
             self.theme_action_group.addAction(action)
             appearance_menu.addAction(action)
+            self._theme_actions[mode] = action
 
         help_menu = self.menuBar().addMenu("帮助")
         help_menu.addAction(self.check_update_action)
@@ -272,6 +275,12 @@ class DashDesignQtApp(QMainWindow):
     def _on_theme_changed(self, resolved: str) -> None:
         self._apply_icons()
         self._render_progress()
+        # 让"视图 → 外观"菜单的勾选与设置对话框改动保持同步（不重触发 triggered）。
+        manager = theme.manager()
+        if manager is not None:
+            action = self._theme_actions.get(manager.mode())
+            if action is not None and not action.isChecked():
+                action.setChecked(True)
 
     def _set_theme_mode(self, mode: str) -> None:
         if theme.manager() is not None:
@@ -712,10 +721,10 @@ class DashDesignQtApp(QMainWindow):
         if not silent:
             QMessageBox.warning(self, "更新检查失败", message)
 
-    def open_api_settings(self) -> None:
-        dialog = ApiSettingsDialog(self)
-        if dialog.exec() == ApiSettingsDialog.DialogCode.Accepted:
-            self.banner.show_message("success", "API 设置已保存。", timeout_ms=2500)
+    def open_settings(self) -> None:
+        dialog = SettingsDialog(self)
+        if dialog.exec() == SettingsDialog.DialogCode.Accepted:
+            self.banner.show_message("success", "设置已保存。", timeout_ms=2500)
 
     def show_about(self) -> None:
         QMessageBox.information(

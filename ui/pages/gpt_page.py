@@ -85,9 +85,9 @@ class GptPage(QWidget):
         if not api_config.has_api_key():
             window.banner.show_message(
                 "error",
-                "尚未配置 API Key，无法调用图像 API。请先在“文件 → API 设置”中填写。",
-                action_label="打开 API 设置",
-                action_callback=window.open_api_settings,
+                "尚未配置 API Key，无法调用图像 API。请先在“文件 → 设置”中填写。",
+                action_label="打开设置",
+                action_callback=window.open_settings,
             )
             return False
         return True

@@ -79,7 +79,7 @@ Complete poster Image2 uses two additional controls:
 
 The desktop client always calls the image API (there is no offline toggle;
 the `立即调用 API` checkbox was removed). It uses the API base URL and key from
-文件 → API 设置 (see API Settings below); if none is configured it refuses to
+文件 → 设置 (see API Settings below); if none is configured it refuses to
 run and points you there. When print post-processing is enabled, the generated
 master is resized to the requested centimeter size and DPI. (The underlying
 `scripts/text_to_image_print.py` still supports an offline `--execute`-less run
@@ -121,7 +121,7 @@ Calls `scripts/gpt_image_rebuild.py`.
 
 Use this when you want a GPT Image generation/edit request package for a source
 poster. The desktop client always calls the API using the credentials from
-文件 → API 设置; the underlying `scripts/gpt_image_rebuild.py` still supports an
+文件 → 设置; the underlying `scripts/gpt_image_rebuild.py` still supports an
 offline (`--execute`-less) request-package run for command-line use.
 
 ### 5. Remove QR Area
@@ -166,8 +166,9 @@ downsampled copy).
   stop).
 - Sidebar workflow navigation (with icons) and per-workflow parameter panels;
   mode-specific controls are shown or hidden per selected mode.
-- Token-based theme system with light/dark variants; `视图 → 外观` switches
-  between follow-system, light, and dark (persisted via QSettings).
+- Token-based theme system with light/dark variants; switch follow-system /
+  light / dark from 文件 → 设置 (外观 section, with live preview) or the quick
+  `视图 → 外观` menu (persisted via QSettings; the two stay in sync).
 - Inline banner notifications for parameter errors, run completion (with an
   open-output shortcut), and failures (with the last stderr line).
 - Graphical run progress panel instead of a raw terminal log: a stage stepper
@@ -189,7 +190,7 @@ downsampled copy).
 
 ## API Settings
 
-The image API base URL and key are configured once in 文件 → API 设置 and
+The image API base URL and key are configured once in 文件 → 设置 and
 persisted per-user via QSettings (`api/base_url`, `api/key`) — not in the repo,
 and they survive app updates (a project file would be lost inside the packaged
 `.app`). The key is stored in plain text in the OS user-settings store and is
@@ -208,7 +209,8 @@ until a key is available.
 - `ui/main_window.py`: main window, process lifecycle, preview panel.
 - `ui/pages/`: one module per workflow page.
 - `ui/widgets/`: shared widgets (PathField, ImagePreview with rectangle
-  selection, InfoBanner, ApiSettingsGroup, FlowLayout, ProgressPanel).
+  selection, InfoBanner, FlowLayout, ProgressPanel, SettingsDialog).
+- `ui/api_config.py`: persisted app-wide API credentials (see API Settings).
 - `ui/theme.py`: semantic design tokens and the light/dark QSS overlay on top
   of the qdarktheme base.
 - `ui/commands.py`: pure, unit-tested command builders (`tests/`).
