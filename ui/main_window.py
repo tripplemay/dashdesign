@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import qtawesome as qta
 from PySide6.QtCore import QProcess, QProcessEnvironment, QSize, Qt, QTimer, QUrl, qVersion
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -34,9 +35,8 @@ from app_runtime import (
     runtime_root,
     version_tuple,
 )
-from ui import commands
+from ui import commands, theme
 from ui.pages import BaselinePage, BatchPage, GptPage, QrPage, TextImagePage
-from ui.theme import app_stylesheet
 from ui.updater import UpdateSignals, fetch_update_manifest
 from ui.utils import open_path
 from ui.widgets import ImagePreview
@@ -58,7 +58,9 @@ class DashDesignQtApp(QMainWindow):
         self._build_actions()
         self._build_menu()
         self._build_ui()
-        self.setStyleSheet(app_stylesheet())
+        self._apply_icons()
+        if theme.manager() is not None:
+            theme.manager().changed.connect(self._on_theme_changed)
         self.statusBar().showMessage(f"Qt {qVersion()} · 就绪")
         if configured_update_manifest_url():
             QTimer.singleShot(1600, lambda: self.check_for_updates(silent=True))
@@ -98,6 +100,19 @@ class DashDesignQtApp(QMainWindow):
         workflow_menu.addAction(self.run_action)
         workflow_menu.addAction(self.stop_action)
 
+        view_menu = self.menuBar().addMenu("视图")
+        appearance_menu = view_menu.addMenu("外观")
+        self.theme_action_group = QActionGroup(self)
+        self.theme_action_group.setExclusive(True)
+        current_mode = theme.manager().mode() if theme.manager() is not None else "system"
+        for mode, label in (("system", "跟随系统"), ("light", "浅色"), ("dark", "深色")):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(mode == current_mode)
+            action.triggered.connect(lambda checked=False, m=mode: self._set_theme_mode(m))
+            self.theme_action_group.addAction(action)
+            appearance_menu.addAction(action)
+
         help_menu = self.menuBar().addMenu("帮助")
         help_menu.addAction(self.check_update_action)
         about = QAction("关于 DashDesign", self)
@@ -111,9 +126,11 @@ class DashDesignQtApp(QMainWindow):
         root_layout.setSpacing(0)
 
         self.nav = QListWidget()
+        self.nav.setObjectName("NavList")
         self.nav.setFixedWidth(196)
         self.nav.setFrameShape(QFrame.Shape.NoFrame)
         self.nav.setSpacing(2)
+        self.nav.setIconSize(QSize(18, 18))
         for key, label in [
             ("baseline", "项目基线"),
             ("text-image", "文生图"),
@@ -142,9 +159,12 @@ class DashDesignQtApp(QMainWindow):
         title_block.addWidget(self.title_label)
         title_block.addWidget(self.subtitle_label)
         header.addLayout(title_block, 1)
-        header.addWidget(self._button("运行", self.run_current, primary=True))
-        header.addWidget(self._button("停止", self.stop_process))
-        header.addWidget(self._button("打开输出", self.open_last_output))
+        self.run_button = self._button("运行", self.run_current, primary=True)
+        self.stop_button = self._button("停止", self.stop_process)
+        self.open_output_button = self._button("打开输出", self.open_last_output)
+        header.addWidget(self.run_button)
+        header.addWidget(self.stop_button)
+        header.addWidget(self.open_output_button)
         work_layout.addLayout(header)
 
         self.baseline_page = BaselinePage()
@@ -179,6 +199,7 @@ class DashDesignQtApp(QMainWindow):
         work_layout.addLayout(log_header)
 
         self.log = QPlainTextEdit()
+        self.log.setObjectName("RunLog")
         self.log.setReadOnly(True)
         self.log.setMinimumHeight(180)
         self.log.setMaximumBlockCount(4000)
@@ -196,6 +217,35 @@ class DashDesignQtApp(QMainWindow):
         if primary:
             button.setObjectName("PrimaryButton")
         return button
+
+    _NAV_ICON_NAMES = (
+        "mdi6.clipboard-text-outline",
+        "mdi6.image-edit-outline",
+        "mdi6.printer-outline",
+        "mdi6.auto-fix",
+        "mdi6.qrcode-remove",
+    )
+
+    def _apply_icons(self) -> None:
+        tokens = theme.current_tokens()
+        nav_fg = tokens["nav_fg"]
+        nav_selected = tokens["sidebar_item_selected_fg"]
+        for row, icon_name in enumerate(self._NAV_ICON_NAMES):
+            item = self.nav.item(row)
+            if item is not None:
+                item.setIcon(qta.icon(icon_name, color=nav_fg, color_selected=nav_selected))
+        self.run_button.setIcon(qta.icon("mdi6.play", color=tokens["accent_fg"]))
+        self.stop_button.setIcon(qta.icon("mdi6.stop", color=nav_fg))
+        self.open_output_button.setIcon(qta.icon("mdi6.folder-open-outline", color=nav_fg))
+        self.run_action.setIcon(qta.icon("mdi6.play", color=nav_fg))
+        self.stop_action.setIcon(qta.icon("mdi6.stop", color=nav_fg))
+
+    def _on_theme_changed(self, resolved: str) -> None:
+        self._apply_icons()
+
+    def _set_theme_mode(self, mode: str) -> None:
+        if theme.manager() is not None:
+            theme.manager().set_mode(mode)
 
     def _make_preview_panel(self) -> QWidget:
         panel = QWidget()
@@ -221,6 +271,7 @@ class DashDesignQtApp(QMainWindow):
         layout.addWidget(self.preview_path_label)
 
         self.preview = ImagePreview()
+        self.preview.setObjectName("PreviewCanvas")
         self.preview.pathDropped.connect(self.handle_dropped_path)
         layout.addWidget(self.preview, 1)
 
@@ -480,6 +531,9 @@ def create_application(argv: list[str]) -> QApplication:
     app = QApplication(argv)
     app.setApplicationName("DashDesign")
     app.setOrganizationName("DashDesign")
-    if "macOS" in QStyleFactory.keys():
-        app.setStyle("macOS")
+    # 双平台统一 Fusion 基底：可被 QSS 完整定制，且是 Windows 下唯一
+    # 支持暗色 palette 的内置 style；macOS 菜单栏仍走原生。
+    if "Fusion" in QStyleFactory.keys():
+        app.setStyle("Fusion")
+    theme.init_theme(app)
     return app
