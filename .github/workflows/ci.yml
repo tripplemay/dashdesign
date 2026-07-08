@@ -31,11 +31,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-desktop.txt
           python -m pip install -r requirements-packaging.txt
+          python -m pip install -r requirements-dev.txt
 
       - name: Compile Python files
         shell: bash
         run: |
-          python -m py_compile desktop_qt_app.py desktop_tool.py dashdesign_worker.py scripts/*.py
+          python -m py_compile desktop_qt_app.py desktop_tool.py dashdesign_worker.py app_runtime.py ui/*.py ui/pages/*.py ui/widgets/*.py scripts/*.py
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          python -m pytest tests/ -q
 
       - name: Validate desktop command wiring
         shell: bash

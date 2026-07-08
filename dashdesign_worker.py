@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import sys
 
-from desktop_qt_app import run_script_worker
+from app_runtime import run_script_worker
 
 
 def main() -> int:
