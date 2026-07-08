@@ -180,6 +180,12 @@ def run_script_worker(script_name: str, args: list[str]) -> int:
     old_path = sys.path[:]
     sys.argv = [str(script_path), *args]
     sys.path.insert(0, str(script_path.parent))
+    # worker 的 stdout 连的是管道（非 TTY），CPython 默认全块缓冲，会把脚本
+    # 的进度输出憋到缓冲满或退出才冲出。切成行缓冲让每行 print 立即到达 GUI。
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    except (AttributeError, ValueError, OSError):
+        pass
     try:
         runpy.run_path(str(script_path), run_name="__main__")
     except SystemExit as exc:

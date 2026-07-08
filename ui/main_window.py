@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -30,8 +29,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
-    QPlainTextEdit,
-    QProgressBar,
     QPushButton,
     QSplitter,
     QStackedWidget,
@@ -52,9 +49,10 @@ from app_runtime import (
 )
 from ui import commands, theme
 from ui.pages import BaselinePage, BatchPage, GptPage, QrPage, TextImagePage
+from ui.progress import ProgressModel, parse_progress_line
 from ui.updater import UpdateSignals, fetch_update_manifest
 from ui.utils import open_path
-from ui.widgets import ImagePreview, InfoBanner
+from ui.widgets import ImagePreview, InfoBanner, ProgressPanel
 
 
 class DashDesignQtApp(QMainWindow):
@@ -68,6 +66,9 @@ class DashDesignQtApp(QMainWindow):
         self.current_preview_path: "Path | None" = None
         self._running = False
         self._stderr_tail: "deque[str]" = deque(maxlen=5)
+        self._progress = ProgressModel()
+        self._captured: "list[str]" = []
+        self._stdout_buf = ""
         self._elapsed = QElapsedTimer()
         self._elapsed_tick = QTimer(self)
         self._elapsed_tick.setInterval(1000)
@@ -104,6 +105,9 @@ class DashDesignQtApp(QMainWindow):
         self.open_output_action = QAction("打开最近输出", self)
         self.open_output_action.triggered.connect(self.open_last_output)
 
+        self.export_log_action = QAction("导出运行日志…", self)
+        self.export_log_action.triggered.connect(self.export_log)
+
         self.check_update_action = QAction("检查更新", self)
         self.check_update_action.triggered.connect(lambda: self.check_for_updates(silent=False))
 
@@ -116,6 +120,7 @@ class DashDesignQtApp(QMainWindow):
         file_menu = self.menuBar().addMenu("文件")
         file_menu.addAction(self.open_project_action)
         file_menu.addAction(self.open_output_action)
+        file_menu.addAction(self.export_log_action)
         file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
@@ -222,50 +227,14 @@ class DashDesignQtApp(QMainWindow):
         self.main_splitter.addWidget(self.stack)
         self.main_splitter.addWidget(self._make_preview_panel())
         self.main_splitter.setSizes([620, 420])
+        work_layout.addWidget(self.main_splitter, 1)
 
-        log_container = QWidget()
-        log_layout = QVBoxLayout(log_container)
-        log_layout.setContentsMargins(0, 0, 0, 0)
-        log_layout.setSpacing(6)
-        log_header = QHBoxLayout()
-        log_header.addWidget(QLabel("运行日志"))
-        log_header.addStretch(1)
-        copy_log = QPushButton("复制")
-        copy_log.clicked.connect(self.copy_log)
-        export_log = QPushButton("导出…")
-        export_log.clicked.connect(self.export_log)
-        clear_log = QPushButton("清空")
-        log_header.addWidget(copy_log)
-        log_header.addWidget(export_log)
-        log_header.addWidget(clear_log)
-        log_layout.addLayout(log_header)
-
-        self.log = QPlainTextEdit()
-        self.log.setObjectName("RunLog")
-        self.log.setReadOnly(True)
-        self.log.setMinimumHeight(80)
-        self.log.setMaximumBlockCount(4000)
-        log_layout.addWidget(self.log)
-        clear_log.clicked.connect(self.log.clear)
-
-        self.v_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.v_splitter.addWidget(self.main_splitter)
-        self.v_splitter.addWidget(log_container)
-        self.v_splitter.setStretchFactor(0, 3)
-        self.v_splitter.setStretchFactor(1, 1)
-        self.v_splitter.setSizes([520, 200])
-        work_layout.addWidget(self.v_splitter, 1)
-
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
-        self.progress.setFixedWidth(140)
-        self.progress.hide()
-        self.statusBar().addPermanentWidget(self.progress)
+        self.progress_panel = ProgressPanel()
+        work_layout.addWidget(self.progress_panel)
 
         root_layout.addWidget(work_area, 1)
         self.setCentralWidget(root)
         self.nav.setCurrentRow(0)
-        self.append_log("Qt 客户端已启动。请选择工作流并运行。", kind="meta")
 
     def _button(self, label: str, slot, primary: bool = False) -> QPushButton:  # type: ignore[no-untyped-def]
         button = QPushButton(label)
@@ -298,6 +267,7 @@ class DashDesignQtApp(QMainWindow):
 
     def _on_theme_changed(self, resolved: str) -> None:
         self._apply_icons()
+        self._render_progress()
 
     def _set_theme_mode(self, mode: str) -> None:
         if theme.manager() is not None:
@@ -395,37 +365,26 @@ class DashDesignQtApp(QMainWindow):
             timeout_ms=4000,
         )
 
-    def append_log(self, text: str, kind: str = "out") -> None:
-        tokens = theme.current_tokens()
-        colors = {
-            "out": tokens["log_fg"],
-            "err": tokens["log_err"],
-            "meta": tokens["log_meta"],
-        }
-        color = colors.get(kind, tokens["log_fg"])
+    def _capture(self, text: str) -> None:
+        # 原始输出不再在界面显示，只保留在内存里供"导出运行日志"排查。
         timestamp = datetime.now().strftime("%H:%M:%S")
-        body = html.escape(text).replace("\n", "<br>")
-        self.log.appendHtml(
-            f'<span style="color:{tokens["log_meta"]}">[{timestamp}]</span> '
-            f'<span style="color:{color}">{body}</span>'
-        )
-        self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().maximum())
-
-    def copy_log(self) -> None:
-        QApplication.clipboard().setText(self.log.toPlainText())
-        self.banner.show_message("success", "日志已复制到剪贴板。", timeout_ms=2500)
+        for line in text.splitlines() or [text]:
+            self._captured.append(f"[{timestamp}] {line}")
 
     def export_log(self) -> None:
+        if not self._captured:
+            self.banner.show_message("info", "还没有可导出的运行输出。", timeout_ms=3000)
+            return
         default = str(Path.home() / f"dashdesign-log-{datetime.now():%Y%m%d-%H%M%S}.txt")
-        path, _ = QFileDialog.getSaveFileName(self, "导出日志", default, "Text Files (*.txt);;All Files (*)")
+        path, _ = QFileDialog.getSaveFileName(self, "导出运行日志", default, "Text Files (*.txt);;All Files (*)")
         if not path:
             return
         try:
-            Path(path).write_text(self.log.toPlainText(), encoding="utf-8")
+            Path(path).write_text("\n".join(self._captured) + "\n", encoding="utf-8")
         except OSError as exc:
             self.banner.show_message("error", f"日志导出失败：{exc}")
             return
-        self.banner.show_message("success", f"日志已导出：{path}", timeout_ms=4000)
+        self.banner.show_message("success", f"运行日志已导出：{path}", timeout_ms=4000)
 
     def _update_run_controls(self) -> None:
         can_run = not self._running and self.nav.currentRow() != 0
@@ -437,7 +396,6 @@ class DashDesignQtApp(QMainWindow):
     def _set_running(self, running: bool) -> None:
         self._running = running
         self._update_run_controls()
-        self.progress.setVisible(running)
         if running:
             self._elapsed.start()
             self._elapsed_tick.start()
@@ -445,12 +403,21 @@ class DashDesignQtApp(QMainWindow):
         else:
             self._elapsed_tick.stop()
 
+    def _elapsed_seconds(self) -> int:
+        return self._elapsed.elapsed() // 1000 if self._elapsed.isValid() else 0
+
     def _elapsed_text(self) -> str:
-        seconds = self._elapsed.elapsed() // 1000 if self._elapsed.isValid() else 0
+        seconds = self._elapsed_seconds()
         return f"{seconds // 60:02d}:{seconds % 60:02d}"
 
     def _update_elapsed_status(self) -> None:
+        # 每秒刷新：状态栏计时 + 进度面板（ETA/用时随之更新）。
         self.statusBar().showMessage(f"运行中 · {self._elapsed_text()}")
+        self._render_progress()
+
+    def _render_progress(self) -> None:
+        if self._running:
+            self.progress_panel.render(self._progress, self._elapsed_seconds(), self._running)
 
     def run_current(self) -> None:
         if self.process is not None:
@@ -470,13 +437,19 @@ class DashDesignQtApp(QMainWindow):
 
         self.banner.dismiss()
         self._stderr_tail.clear()
+        self._captured = []
+        self._stdout_buf = ""
+        self._progress = ProgressModel()
+        self.progress_panel.reset()
         self.last_output_dir = output_dir
-        self.append_log("$ " + " ".join(command), kind="meta")
+        self._capture("$ " + " ".join(command))
         self._set_running(True)
 
         process_env = QProcessEnvironment.systemEnvironment()
         for key, value in env_updates.items():
             process_env.insert(key, value)
+        # 让脚本发出结构化进度事件；命令行直跑脚本时不设此变量，输出保持原样。
+        process_env.insert("DASHDESIGN_PROGRESS", "1")
 
         self.process = QProcess(self)
         self.process.setWorkingDirectory(str(runtime_root()))
@@ -492,8 +465,9 @@ class DashDesignQtApp(QMainWindow):
         # 其他错误（如 Crashed）仍由 process_finished 统一收尾。
         if error != QProcess.ProcessError.FailedToStart or self.process is None:
             return
-        self.append_log("[错误] 工作流进程启动失败：找不到可执行文件或没有执行权限。", kind="err")
+        self._capture("[错误] 工作流进程启动失败：找不到可执行文件或没有执行权限。")
         self.statusBar().showMessage("启动失败")
+        self.progress_panel.finalize(False, self._elapsed_seconds())
         self.banner.show_message(
             "error", "工作流进程启动失败：找不到可执行文件或没有执行权限，请检查安装是否完整。"
         )
@@ -505,7 +479,7 @@ class DashDesignQtApp(QMainWindow):
     def stop_process(self) -> None:
         if self.process is None:
             return
-        self.append_log("[停止] 已发送 terminate", kind="meta")
+        self._capture("[停止] 已发送 terminate")
         self.process.terminate()
         if not self.process.waitForFinished(2500):
             self.process.kill()
@@ -514,8 +488,26 @@ class DashDesignQtApp(QMainWindow):
         if self.process is None:
             return
         data = bytes(self.process.readAllStandardOutput()).decode(errors="replace")
-        if data:
-            self.append_log(data.rstrip())
+        if not data:
+            return
+        self._stdout_buf += data
+        while "\n" in self._stdout_buf:
+            line, self._stdout_buf = self._stdout_buf.split("\n", 1)
+            self._handle_output_line(line)
+
+    def _handle_output_line(self, line: str) -> None:
+        event = parse_progress_line(line)
+        if event is not None:
+            self._progress.apply(event)
+            self._render_progress()
+            return
+        if line.strip():
+            self._capture(line)
+
+    def _flush_stdout_buf(self) -> None:
+        if self._stdout_buf:
+            self._handle_output_line(self._stdout_buf)
+            self._stdout_buf = ""
 
     def read_stderr(self) -> None:
         if self.process is None:
@@ -525,14 +517,18 @@ class DashDesignQtApp(QMainWindow):
             for line in data.rstrip().splitlines():
                 if line.strip():
                     self._stderr_tail.append(line.strip())
-            self.append_log(data.rstrip(), kind="err")
+            self._capture(data.rstrip())
 
     def process_finished(self, exit_code: int, exit_status) -> None:  # type: ignore[no-untyped-def]
+        self._flush_stdout_buf()
+        elapsed_seconds = self._elapsed_seconds()
         elapsed = self._elapsed_text()
-        self.append_log(f"[完成] exit={exit_code} · 用时 {elapsed}", kind="meta")
+        self._capture(f"[完成] exit={exit_code} · 用时 {elapsed}")
+        success = exit_code == 0
+        self.progress_panel.finalize(success, elapsed_seconds)
         self._set_running(False)
         self.process = None
-        if exit_code == 0:
+        if success:
             self.statusBar().showMessage(f"完成 · 用时 {elapsed}")
             self.banner.show_message(
                 "success",
@@ -551,12 +547,9 @@ class DashDesignQtApp(QMainWindow):
             self.banner.show_message(
                 "error",
                 summary,
-                action_label="查看日志",
-                action_callback=self._scroll_log_to_end,
+                action_label="导出日志",
+                action_callback=self.export_log,
             )
-
-    def _scroll_log_to_end(self) -> None:
-        self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().maximum())
 
     def build_current_command(self):
         row = self.nav.currentRow()
@@ -715,10 +708,9 @@ class DashDesignQtApp(QMainWindow):
         geometry = settings.value("window/geometry")
         if geometry is not None:
             self.restoreGeometry(geometry)
-        for splitter, key in ((self.main_splitter, "window/main_splitter"), (self.v_splitter, "window/v_splitter")):
-            state = settings.value(key)
-            if state is not None:
-                splitter.restoreState(state)
+        state = settings.value("window/main_splitter")
+        if state is not None:
+            self.main_splitter.restoreState(state)
         last_output = str(settings.value("window/last_output_dir", ""))
         if last_output and Path(last_output).exists():
             self.last_output_dir = Path(last_output)
@@ -733,7 +725,6 @@ class DashDesignQtApp(QMainWindow):
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/main_splitter", self.main_splitter.saveState())
-        settings.setValue("window/v_splitter", self.v_splitter.saveState())
         settings.setValue("window/nav_row", self.nav.currentRow())
         if self.last_output_dir is not None:
             settings.setValue("window/last_output_dir", str(self.last_output_dir))
