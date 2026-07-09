@@ -131,6 +131,17 @@ class AppConfig(Base):
     updated_by: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
 
+class AdminAuth(Base):
+    """Single-row admin password hash — set from env on first boot, then editable
+    at runtime via the client. Never exposed to clients (unlike AppConfig)."""
+
+    __tablename__ = "admin_auth"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    password_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 class Token(Base):
     __tablename__ = "tokens"
 

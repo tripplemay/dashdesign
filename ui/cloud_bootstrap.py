@@ -105,6 +105,18 @@ def verify_admin(password: str) -> bool:
     return resp.status_code == 200
 
 
+def change_admin_password(current: str, new: str) -> None:
+    """Admin-only: change the admin password. Raises on failure."""
+    resp = requests.post(
+        f"{CLOUD_ENDPOINT}/admin/change-password",
+        json={"current_password": current, "new_password": new},
+        timeout=_TIMEOUT,
+    )
+    if resp.status_code == 403:
+        raise PermissionError("当前管理密码错误")
+    resp.raise_for_status()
+
+
 def push_app_config(password: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Admin-only: upload the shared config. Raises on failure."""
     resp = requests.put(

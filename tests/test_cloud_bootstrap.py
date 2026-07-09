@@ -106,3 +106,23 @@ def test_push_wrong_password_raises(monkeypatch):
     monkeypatch.setattr(cloud_bootstrap.requests, "put", lambda *a, **k: _FakeResp(403, {"code": "forbidden"}))
     with pytest.raises(PermissionError):
         cloud_bootstrap.push_app_config("bad", {})
+
+
+def test_change_admin_password(monkeypatch):
+    sent = {}
+
+    def _post(url, json=None, **k):
+        sent["url"] = url
+        sent["body"] = json
+        return _FakeResp(200, {"ok": True})
+
+    monkeypatch.setattr(cloud_bootstrap.requests, "post", _post)
+    cloud_bootstrap.change_admin_password("old", "newpass1")
+    assert sent["url"].endswith("/admin/change-password")
+    assert sent["body"] == {"current_password": "old", "new_password": "newpass1"}
+
+
+def test_change_admin_password_wrong_current_raises(monkeypatch):
+    monkeypatch.setattr(cloud_bootstrap.requests, "post", lambda *a, **k: _FakeResp(403, {}))
+    with pytest.raises(PermissionError):
+        cloud_bootstrap.change_admin_password("bad", "newpass1")

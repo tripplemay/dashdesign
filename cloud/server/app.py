@@ -8,6 +8,7 @@ the chat factory and (in tests) an in-memory SQLite engine can be injected.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 from typing import Callable, Iterator, List, Optional
 
@@ -54,6 +55,10 @@ def _error_response(exc: BaselineError) -> JSONResponse:
 
 def _default_chat_factory(model: Optional[str]) -> Callable:
     return make_chat("", "", model or "")
+
+
+def _hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def create_app(
@@ -277,10 +282,18 @@ def create_app(
         return {"status": job.status, "report": job.report, "error": job.error}
 
     # --- shared app config (client bootstrap) ---------------------------
-    def _check_admin_password(provided: str) -> None:
-        expected = app.state.settings.admin_password
-        if not expected or not hmac.compare_digest(provided or "", expected):
-            raise _HTTPError(403, "forbidden", ["管理密码错误，或服务端未配置管理密码"])
+    def _verify_admin_password(store: SqlBaselineStore, provided: str) -> None:
+        # A password set at runtime (DB hash) wins; the env password is only the
+        # initial seed, and stops working once a runtime password is set.
+        stored = store.get_admin_password_hash()
+        if stored:
+            expected = stored
+        elif app.state.settings.admin_password:
+            expected = _hash_password(app.state.settings.admin_password)
+        else:
+            raise _HTTPError(403, "forbidden", ["服务端未配置管理密码"])
+        if not hmac.compare_digest(_hash_password(provided or ""), expected):
+            raise _HTTPError(403, "forbidden", ["管理密码错误"])
 
     @app.get("/app-config", response_model=schemas.AppConfigModel)
     def get_app_config(
@@ -297,12 +310,27 @@ def create_app(
         x_admin_password: str = Header(default=""),
     ):
         # Gated by the admin password only — the admin needs no bearer token.
-        _check_admin_password(x_admin_password)
+        _verify_admin_password(store, x_admin_password)
         return store.set_app_config(body.model_dump(), updated_by="admin")
 
     @app.post("/admin/verify", response_model=schemas.AdminVerifyOut)
-    def admin_verify(x_admin_password: str = Header(default="")):
-        _check_admin_password(x_admin_password)
+    def admin_verify(
+        store: SqlBaselineStore = Depends(get_store),
+        x_admin_password: str = Header(default=""),
+    ):
+        _verify_admin_password(store, x_admin_password)
+        return {"ok": True}
+
+    @app.post("/admin/change-password", response_model=schemas.AdminVerifyOut)
+    def change_password(
+        body: schemas.ChangePasswordIn,
+        store: SqlBaselineStore = Depends(get_store),
+    ):
+        _verify_admin_password(store, body.current_password)
+        new_password = body.new_password.strip()
+        if len(new_password) < 6:
+            raise BaselineError("新管理密码至少 6 位")
+        store.set_admin_password_hash(_hash_password(new_password))
         return {"ok": True}
 
     @app.get("/healthz")

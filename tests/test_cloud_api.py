@@ -232,6 +232,23 @@ class TestAppConfigAndAdmin:
         assert client.post("/admin/verify", headers={"X-Admin-Password": _ADMIN_PW}).json() == {"ok": True}
         assert client.post("/admin/verify", headers={"X-Admin-Password": "bad"}).status_code == 403
 
+    def test_change_password(self, client):
+        # Wrong current -> 403.
+        bad = client.post("/admin/change-password", json={"current_password": "nope", "new_password": "newpass1"})
+        assert bad.status_code == 403
+        # Too short -> rejected.
+        short = client.post("/admin/change-password", json={"current_password": _ADMIN_PW, "new_password": "12"})
+        assert short.status_code == 400
+        # Correct change.
+        ok = client.post("/admin/change-password", json={"current_password": _ADMIN_PW, "new_password": "brand-new-pw"})
+        assert ok.json() == {"ok": True}
+        # Old env password no longer works; the new one does.
+        assert client.post("/admin/verify", headers={"X-Admin-Password": _ADMIN_PW}).status_code == 403
+        assert client.post("/admin/verify", headers={"X-Admin-Password": "brand-new-pw"}).json() == {"ok": True}
+        # The new password now gates config edits too.
+        body = {"image_api_base_url": "", "image_api_key": "k", "baseline_model": "gpt-4o"}
+        assert client.put("/app-config", json=body, headers={"X-Admin-Password": "brand-new-pw"}).status_code == 200
+
 
 class TestGlobalRole:
     def test_global_editor_sees_and_writes_all_projects(self, client, app_ctx):

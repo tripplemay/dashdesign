@@ -259,3 +259,16 @@ class SqlBaselineStore:
             row.updated_by = updated_by
         self.s.flush()
         return dict(row.data)
+
+    # -- admin password (hash at rest; never exposed to clients) --------
+    def get_admin_password_hash(self) -> Optional[str]:
+        row = self.s.get(db.AdminAuth, 1)
+        return row.password_hash if row else None
+
+    def set_admin_password_hash(self, password_hash: str) -> None:
+        row = self.s.get(db.AdminAuth, 1)
+        if row is None:
+            self.s.add(db.AdminAuth(id=1, password_hash=password_hash))
+        else:
+            row.password_hash = password_hash
+        self.s.flush()

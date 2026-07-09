@@ -118,6 +118,23 @@ class SettingsDialog(QDialog):
         grid.addWidget(QLabel("文档合并模型"), 3, 0)
         grid.addWidget(self.cfg_model, 3, 1)
         grid.addWidget(self.save_cloud_btn, 4, 1)
+
+        divider = QLabel("— 修改管理密码 —")
+        divider.setObjectName("Subtitle")
+        grid.addWidget(divider, 5, 0, 1, 2)
+        self.new_pw_edit = QLineEdit()
+        self.new_pw_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.new_pw_edit.setPlaceholderText("新管理密码（至少 6 位）")
+        self.confirm_pw_edit = QLineEdit()
+        self.confirm_pw_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.confirm_pw_edit.setPlaceholderText("再次输入新密码")
+        self.change_pw_btn = QPushButton("修改管理密码")
+        self.change_pw_btn.clicked.connect(self._change_password)
+        grid.addWidget(QLabel("新管理密码"), 6, 0)
+        grid.addWidget(self.new_pw_edit, 6, 1)
+        grid.addWidget(QLabel("确认新密码"), 7, 0)
+        grid.addWidget(self.confirm_pw_edit, 7, 1)
+        grid.addWidget(self.change_pw_btn, 8, 1)
         grid.setColumnStretch(1, 1)
         self.cfg_container.setEnabled(False)
         outer.addWidget(self.cfg_container)
@@ -172,6 +189,30 @@ class SettingsDialog(QDialog):
 
         baseline_service.reset_repository()
         self.cloud_status.setText("已保存并上传，所有用户下次启动自动生效。")
+
+    def _change_password(self) -> None:
+        current = self.admin_pw_edit.text().strip()
+        new = self.new_pw_edit.text().strip()
+        confirm = self.confirm_pw_edit.text().strip()
+        if len(new) < 6:
+            self.cloud_status.setText("新管理密码至少 6 位。")
+            return
+        if new != confirm:
+            self.cloud_status.setText("两次输入的新密码不一致。")
+            return
+        try:
+            cloud_bootstrap.change_admin_password(current, new)
+        except PermissionError:
+            self.cloud_status.setText("当前管理密码错误。")
+            return
+        except Exception as exc:  # noqa: BLE001
+            self.cloud_status.setText(f"修改失败：{exc}")
+            return
+        # Keep editing with the new password (later saves use it).
+        self.admin_pw_edit.setText(new)
+        self.new_pw_edit.clear()
+        self.confirm_pw_edit.clear()
+        self.cloud_status.setText("管理密码已修改。请牢记新密码。")
 
     # -- dialog buttons -------------------------------------------------
     def _on_save(self) -> None:

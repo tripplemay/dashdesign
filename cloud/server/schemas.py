@@ -76,3 +76,8 @@ class AppConfigModel(BaseModel):
 
 class AdminVerifyOut(BaseModel):
     ok: bool
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
