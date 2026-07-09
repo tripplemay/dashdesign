@@ -117,10 +117,66 @@ def save_preview(source: Path, destination: Path, max_edge: int = 1600) -> None:
         image.save(destination, quality=92, optimize=True)
 
 
+# 文生图 / 整幅海报工作流的产物（master.png）文件名不带物理尺寸，
+# 尺寸写在同目录 print_spec.json 与父目录名（如 ..._80x80_...）里。
+# 串接这些产物做 GPT 重建时，需要在文件名解析失败后回退到这两处。
+_DIR_SIZE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*[乘xX×*]\s*(\d+(?:\.\d+)?)")
+
+
+def _normalize_cm(value: float) -> int | float:
+    number = float(value)
+    return int(number) if number.is_integer() else number
+
+
+def _size_from_print_spec(source: Path) -> tuple[float, float] | None:
+    spec_path = source.parent / "print_spec.json"
+    if not spec_path.is_file():
+        return None
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        width_cm = float(spec["width_cm"])
+        height_cm = float(spec["height_cm"])
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+    if width_cm <= 0 or height_cm <= 0:
+        return None
+    return width_cm, height_cm
+
+
+def _size_from_ancestors(source: Path) -> tuple[float, float] | None:
+    for part in reversed(source.parent.parts):
+        match = _DIR_SIZE_RE.search(part)
+        if match:
+            return float(match.group(1)), float(match.group(2))
+    return None
+
+
+def resolve_physical_size(source: Path) -> tuple[int | float, int | float] | None:
+    """Resolve the target physical size (cm) for a rebuild source.
+
+    Resolution order: size token in the filename (e.g. ``80乘80``) → sibling
+    ``print_spec.json`` → ancestor directory name (e.g. ``..._80x80_...``).
+    This lets chained assets such as the text-to-image ``master.png`` — whose
+    filename carries no size — inherit the size their workflow already recorded.
+    """
+    for candidate in (
+        parse_size_from_name(source),
+        _size_from_print_spec(source),
+        _size_from_ancestors(source),
+    ):
+        if candidate:
+            width_cm, height_cm = candidate
+            return _normalize_cm(width_cm), _normalize_cm(height_cm)
+    return None
+
+
 def build_profile(source: Path, print_dpi: int) -> ImageProfile:
-    size = parse_size_from_name(source)
+    size = resolve_physical_size(source)
     if not size:
-        raise ValueError(f"Could not parse physical size from filename: {source.name}")
+        raise ValueError(
+            "无法确定物理尺寸：源图文件名未包含尺寸标记（如 80乘80），"
+            f"同目录也缺少可用的 print_spec.json：{source.name}"
+        )
 
     width_cm, height_cm = size
     with Image.open(source) as image:
