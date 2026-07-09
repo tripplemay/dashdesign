@@ -33,9 +33,10 @@ from app_runtime import evidenced_text, text_list
 from baseline import governance, merge
 from baseline.errors import BaselineError
 from baseline.schema import validation_errors
+from baseline import generate as generate_mod
 from baseline.store import today_str
 from ui import api_config, baseline_service
-from ui.merge_job import MergeSignals, run_merge_job
+from ui.merge_job import GenerateSignals, MergeSignals, run_generate_job, run_merge_job
 from ui.utils import open_path
 from ui.widgets import FlowLayout, MergeReviewDialog, NewProjectDialog, SettingsDialog
 
@@ -191,18 +192,90 @@ class BaselinePage(QWidget):
 
     def _new_project(self) -> None:
         dialog = NewProjectDialog(self)
-        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.created_id:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if dialog.generate_request:
+            self._start_generate_project(dialog.generate_request)
+            return
+        if not dialog.created_id:
             return
         self.projectChanged.emit()  # 新项目已设为活跃
         self.reload()
-        idx = self.project_combo.findData(dialog.created_id)
-        if idx >= 0:
-            self.project_combo.setCurrentIndex(idx)
+        self._select_project(dialog.created_id)
         QMessageBox.information(
             self,
             "已创建项目",
             f"项目「{dialog.created_id}」已创建为草稿并设为活跃。"
             "可通过“上传文档合并”补充内容，校验通过后发布。",
+        )
+
+    def _select_project(self, baseline_id: str) -> None:
+        idx = self.project_combo.findData(baseline_id)
+        if idx >= 0:
+            self.project_combo.setCurrentIndex(idx)
+
+    # -- 从文档生成新项目（异步）--------------------------------------
+    def _start_generate_project(self, req: dict) -> None:
+        if not api_config.has_api_key():
+            if QMessageBox.question(
+                self, "尚未配置 API",
+                "从文档生成基线需要调用 API，但尚未配置 API Key。是否现在去“设置”填写？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            ) == QMessageBox.StandardButton.Yes:
+                SettingsDialog(self).exec()
+            return
+        self._gen_req = req
+        self._gen_signals = GenerateSignals(self)
+        self._gen_signals.done.connect(self._on_generate_ready)
+        self._gen_signals.failed.connect(self._on_generate_failed)
+        self.new_project_button.setEnabled(False)
+        self._gen_progress = QProgressDialog("正在分析文档并生成新基线…", None, 0, 0, self)
+        self._gen_progress.setWindowTitle("从文档生成基线")
+        self._gen_progress.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self._gen_progress.setMinimumDuration(0)
+        self._gen_progress.setCancelButton(None)
+        self._gen_progress.show()
+        run_generate_job(
+            req["path"], baseline_service.bundled_baseline(),
+            req["baseline_id"], req["name"],
+            api_config.load_base_url(), api_config.load_api_key(),
+            self._gen_signals, api_config.load_baseline_model(),
+        )
+
+    def _on_generate_failed(self, message: str) -> None:
+        if getattr(self, "_gen_progress", None):
+            self._gen_progress.close()
+        self.new_project_button.setEnabled(True)
+        QMessageBox.warning(self, "生成失败", message)
+
+    def _on_generate_ready(self, payload) -> None:  # type: ignore[no-untyped-def]
+        if getattr(self, "_gen_progress", None):
+            self._gen_progress.close()
+        self.new_project_button.setEnabled(True)
+        skeleton, report = payload
+        # 有候选则先审校 C 端/B 端文案；无候选也可直接用骨架（含定位/模块）创建
+        if report.changes:
+            if MergeReviewDialog(report, self).exec() != QDialog.DialogCode.Accepted:
+                return
+        draft = generate_mod.finalize(skeleton, report)
+        try:
+            info = baseline_service.create_project(draft)
+        except BaselineError as exc:
+            QMessageBox.warning(self, "创建失败", f"生成的基线未通过校验/治理：{exc}")
+            return
+        # 归档源文档
+        try:
+            baseline_service.repository().add_document(info.baseline_id, self._gen_req["path"])
+        except BaselineError:
+            pass
+        self.projectChanged.emit()
+        self.reload()
+        self._select_project(info.baseline_id)
+        QMessageBox.information(
+            self, "已从文档生成项目",
+            f"项目「{info.baseline_id}」已生成为草稿并设为活跃（采纳 {len(report.accepted_changes())} 条候选）。"
+            "请检查定位/受众/课程体系与文案，校验通过后发布。",
         )
 
     def _on_project_changed(self) -> None:

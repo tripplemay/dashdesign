@@ -12,14 +12,21 @@ from typing import Any, Dict
 
 from PySide6.QtCore import QObject, Signal
 
+from baseline import generate
 from baseline.extract import extract_candidates
 from baseline.ingest.parse import parse_document
 from baseline.llm import make_chat
 from baseline.merge import build_merge_report
+from baseline.store import today_str
 
 
 class MergeSignals(QObject):
     done = Signal(object)  # MergeReport
+    failed = Signal(str)
+
+
+class GenerateSignals(QObject):
+    done = Signal(object)  # (skeleton, MergeReport)
     failed = Signal(str)
 
 
@@ -41,6 +48,33 @@ def run_merge_job(
             report = build_merge_report(current_baseline, extraction)
             signals.done.emit(report)
         except Exception as exc:  # noqa: BLE001 - 反馈给 UI
+            signals.failed.emit(str(exc))
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def run_generate_job(
+    path: Path,
+    template: Dict[str, Any],
+    baseline_id: str,
+    name: str,
+    base_url: str,
+    api_key: str,
+    signals: GenerateSignals,
+    model: str = "",
+) -> None:
+    def worker() -> None:
+        try:
+            parsed = parse_document(path)
+            if not parsed.sections:
+                raise RuntimeError("未从文档中解析出任何文本。")
+            chat = make_chat(base_url, api_key, model)
+            skeleton, report = generate.generate_from_document(
+                parsed, template, baseline_id, name, chat, today_str(),
+                {"file": path.name},
+            )
+            signals.done.emit((skeleton, report))
+        except Exception as exc:  # noqa: BLE001
             signals.failed.emit(str(exc))
 
     threading.Thread(target=worker, daemon=True).start()

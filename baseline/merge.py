@@ -134,26 +134,16 @@ def build_merge_report(current: Dict[str, Any], extraction: Dict[str, Any]) -> M
     return report
 
 
-def apply_report(
-    current: Dict[str, Any],
-    report: MergeReport,
-    today: str,
-    existing_versions: List[str],
-) -> Dict[str, Any]:
-    """Produce a new draft with the report's accepted changes applied (additive)."""
-    draft = versioning.new_draft_from(current, today, existing_versions)
-
-    # 追加新文档
+def apply_accepted(baseline: Dict[str, Any], report: MergeReport) -> None:
+    """Append the report's accepted changes into ``baseline`` in place (additive)."""
     doc = report.new_document
     if doc.get("document_id"):
-        docs = draft.setdefault("source_documents", [])
+        docs = baseline.setdefault("source_documents", [])
         if not any(d.get("document_id") == doc["document_id"] for d in docs):
             docs.append(doc)
-            # 追加了新的（可能是 B 端）文档 → 源上下文标记为混合
-            draft["source_context"] = "mixed_docs"
+            baseline["source_context"] = "mixed_docs"
 
-    # 追加新证据（按 id 去重）
-    ev_index = draft.setdefault("evidence_index", [])
+    ev_index = baseline.setdefault("evidence_index", [])
     existing_ids = {e.get("id") for e in ev_index}
     accepted_ev = {e for c in report.accepted_changes() for e in c.evidence}
     for ev in report.new_evidence:
@@ -161,10 +151,9 @@ def apply_report(
             ev_index.append(ev)
             existing_ids.add(ev.get("id"))
 
-    # 追加被采纳的候选
     for change in report.accepted_changes():
         section, field_name = change.target.split(".", 1)
-        target_list = draft.setdefault(section, {}).setdefault(field_name, [])
+        target_list = baseline.setdefault(section, {}).setdefault(field_name, [])
         entry: Dict[str, Any] = {"text": change.text, "evidence": change.evidence}
         if change.confidence:
             entry["confidence"] = round(change.confidence, 2)
@@ -172,4 +161,14 @@ def apply_report(
             entry["notes"] = "B 端合作话术，不允许进入 C 端海报，仅供溯源。"
         target_list.append(entry)
 
+
+def apply_report(
+    current: Dict[str, Any],
+    report: MergeReport,
+    today: str,
+    existing_versions: List[str],
+) -> Dict[str, Any]:
+    """Produce a new draft (bumped version, linked parent) with accepted changes."""
+    draft = versioning.new_draft_from(current, today, existing_versions)
+    apply_accepted(draft, report)
     return draft

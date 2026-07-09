@@ -34,9 +34,12 @@ class NewProjectDialog(QDialog):
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("新建项目")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(520)
         self._import_path: Optional[Path] = None
+        self._doc_path: Optional[Path] = None
         self.created_id: Optional[str] = None
+        # 当选择"从文档生成"时，创建改为异步（需 LLM），由调用方处理该请求
+        self.generate_request: Optional[Dict[str, Any]] = None
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
@@ -59,8 +62,9 @@ class NewProjectDialog(QDialog):
         self.template_radio = QRadioButton("从内置模板新建（复制默认基线结构，再自行编辑/合并）")
         self.clone_radio = QRadioButton("复制现有项目")
         self.import_radio = QRadioButton("导入 JSON 文件")
+        self.generate_radio = QRadioButton("从文档生成（上传项目介绍，自动分析生成新基线，需 API）")
         self.template_radio.setChecked(True)
-        for rb in (self.template_radio, self.clone_radio, self.import_radio):
+        for rb in (self.template_radio, self.clone_radio, self.import_radio, self.generate_radio):
             self._source_group.addButton(rb)
             source_layout.addWidget(rb)
 
@@ -82,10 +86,21 @@ class NewProjectDialog(QDialog):
         import_row.addWidget(self.import_button)
         import_row.addWidget(self.import_label, 1)
         source_layout.addLayout(import_row)
+
+        doc_row = QHBoxLayout()
+        self.doc_button = QPushButton("选择文档…")
+        self.doc_button.setEnabled(False)
+        self.doc_button.clicked.connect(self._choose_doc)
+        self.doc_label = QLabel("未选择（支持 PDF/DOCX/TXT）")
+        self.doc_label.setObjectName("Subtitle")
+        doc_row.addWidget(self.doc_button)
+        doc_row.addWidget(self.doc_label, 1)
+        source_layout.addLayout(doc_row)
         layout.addWidget(source_group)
 
         self.clone_radio.toggled.connect(self.clone_combo.setEnabled)
         self.import_radio.toggled.connect(self.import_button.setEnabled)
+        self.generate_radio.toggled.connect(self.doc_button.setEnabled)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -101,6 +116,14 @@ class NewProjectDialog(QDialog):
         if path:
             self._import_path = Path(path)
             self.import_label.setText(self._import_path.name)
+
+    def _choose_doc(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择项目介绍/背景文档", "", "文档 (*.pdf *.docx *.txt *.md)"
+        )
+        if path:
+            self._doc_path = Path(path)
+            self.doc_label.setText(self._doc_path.name)
 
     def _source_baseline(self) -> Dict[str, Any]:
         if self.clone_radio.isChecked():
@@ -122,6 +145,14 @@ class NewProjectDialog(QDialog):
             return
         if not baseline_id:
             QMessageBox.warning(self, "缺少项目标识", "请填写项目标识（baseline_id）。")
+            return
+        if self.generate_radio.isChecked():
+            # 从文档生成需要调 LLM，交给调用方异步处理（此处仅收集请求）
+            if not self._doc_path:
+                QMessageBox.warning(self, "缺少文档", "请选择用于生成基线的文档。")
+                return
+            self.generate_request = {"name": name, "baseline_id": baseline_id, "path": self._doc_path}
+            self.accept()
             return
         try:
             source = self._source_baseline()
