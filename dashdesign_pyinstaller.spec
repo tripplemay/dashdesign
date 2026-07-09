@@ -60,6 +60,11 @@ GUI_HIDDEN_IMPORTS = [
     "cloud",
     "cloud.client",
 ]
+# The baked shared client token (ui/_secrets.py) is imported inside a try/except
+# in ui.cloud_bootstrap; force it into the bundle when present so the shipped app
+# is zero-config. Absent (e.g. CI without the secret) -> not forced.
+if (ROOT / "ui" / "_secrets.py").exists():
+    GUI_HIDDEN_IMPORTS.append("ui._secrets")
 # 基线摄取/校验依赖：pypdfium2 带原生 pdfium 二进制、python-docx 带 default.docx
 # 模板、jsonschema 需 metadata——用 collect_all 一次性收 datas/binaries/hiddenimports。
 for _pkg in ("jsonschema", "pypdfium2", "docx"):
