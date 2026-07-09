@@ -13,6 +13,7 @@ services:
     environment:
       BASELINE_DB_URL: sqlite:////data/baseline.db
       BASELINE_ADMIN_TOKEN: ${BASELINE_ADMIN_TOKEN:?set BASELINE_ADMIN_TOKEN in .env}
+      BASELINE_ADMIN_PASSWORD: ${BASELINE_ADMIN_PASSWORD:-}
       BASELINE_DOC_STORE: local
       BASELINE_DOC_ROOT: /data/documents
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}

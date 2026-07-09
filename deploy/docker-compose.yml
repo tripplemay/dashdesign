@@ -25,6 +25,7 @@ services:
     environment:
       BASELINE_DB_URL: postgresql+psycopg://baseline:${DB_PASSWORD}@db:5432/baseline
       BASELINE_ADMIN_TOKEN: ${BASELINE_ADMIN_TOKEN:?set BASELINE_ADMIN_TOKEN in .env}
+      BASELINE_ADMIN_PASSWORD: ${BASELINE_ADMIN_PASSWORD:-}
       BASELINE_DOC_STORE: ${BASELINE_DOC_STORE:-local}
       BASELINE_DOC_ROOT: /data/documents
       BASELINE_OSS_BUCKET: ${BASELINE_OSS_BUCKET:-}
