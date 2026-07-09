@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QSplitter,
     QStackedWidget,
@@ -47,10 +48,16 @@ from app_runtime import (
     runtime_root,
     version_tuple,
 )
-from ui import cloud_bootstrap, commands, theme
+from ui import cloud_bootstrap, commands, installer, theme
 from ui.pages import BaselinePage, BatchPage, GptPage, QrPage, TextImagePage
 from ui.progress import ProgressModel, parse_progress_line
-from ui.updater import UpdateSignals, fetch_update_manifest
+from ui.updater import (
+    DownloadSignals,
+    UpdateSignals,
+    download_update,
+    fetch_update_manifest,
+)
+from update_core import UpdateInfo, evaluate_manifest
 from ui.utils import open_path
 from ui.widgets import ImagePreview, InfoBanner, ProgressPanel, SettingsDialog
 
@@ -79,6 +86,13 @@ class DashDesignQtApp(QMainWindow):
         self.update_signals = UpdateSignals(self)
         self.update_signals.result.connect(self.handle_update_result)
         self.update_signals.error.connect(self.handle_update_error)
+        self.download_signals = DownloadSignals(self)
+        self.download_signals.progress.connect(self._on_update_progress)
+        self.download_signals.done.connect(self._on_update_downloaded)
+        self.download_signals.error.connect(self._on_update_error)
+        self.download_signals.cancelled.connect(self._on_update_cancelled)
+        self._update_dialog: "QProgressDialog | None" = None
+        self._update_cancelled = False
 
         self._build_actions()
         self._build_menu()
@@ -692,29 +706,37 @@ class DashDesignQtApp(QMainWindow):
 
     def handle_update_result(self, payload: dict, silent: bool) -> None:
         self.statusBar().showMessage("更新检查完成")
-        latest_version = str(payload.get("version", "")).strip()
-        if not latest_version:
+        info = evaluate_manifest(payload, APP_VERSION, platform_key())
+        if info is None:
             if not silent:
-                QMessageBox.warning(self, "更新信息无效", "manifest 中缺少 version。")
+                self._explain_no_update(payload)
             return
-        if version_tuple(latest_version) <= version_tuple(APP_VERSION):
-            if not silent:
-                QMessageBox.information(self, "已是最新版本", f"当前版本 {APP_VERSION} 已是最新。")
-            return
+        # 只有 Windows 安装版能一键自动更新（Inno 安装器可关旧进程、覆盖
+        # Program Files 并重启）。便携版与 macOS 一律降级为跳浏览器手动下载。
+        if platform_key() == "windows" and installer.is_installed_build():
+            self._offer_windows_auto_update(info)
+        else:
+            self._offer_manual_download(info)
 
-        platforms = payload.get("platforms", {})
-        platform_info = platforms.get(platform_key(), {}) if isinstance(platforms, dict) else {}
-        download_url = platform_info.get("url") or payload.get("url")
-        if not download_url:
-            if not silent:
-                QMessageBox.warning(self, "更新信息无效", f"版本 {latest_version} 缺少当前平台安装包 URL。")
-            return
+    def _explain_no_update(self, payload: dict) -> None:
+        latest = str(payload.get("version", "")).strip()
+        if not latest:
+            QMessageBox.warning(self, "更新信息无效", "manifest 中缺少 version。")
+        elif version_tuple(latest) <= version_tuple(APP_VERSION):
+            QMessageBox.information(self, "已是最新版本", f"当前版本 {APP_VERSION} 已是最新。")
+        else:
+            QMessageBox.warning(
+                self, "更新信息无效", f"版本 {latest} 缺少当前平台安装包 URL。"
+            )
 
-        notes = payload.get("notes", "")
-        message = f"发现新版本 {latest_version}。\n\n当前版本：{APP_VERSION}"
-        if notes:
-            message += f"\n\n{notes}"
-        message += "\n\n是否打开安装包下载地址？"
+    def _update_prompt(self, info: UpdateInfo, tail: str) -> str:
+        message = f"发现新版本 {info.version}。\n\n当前版本：{APP_VERSION}"
+        if info.notes:
+            message += f"\n\n{info.notes}"
+        return message + tail
+
+    def _offer_manual_download(self, info: UpdateInfo) -> None:
+        message = self._update_prompt(info, "\n\n是否打开安装包下载地址？")
         reply = QMessageBox.question(
             self,
             "发现更新",
@@ -723,7 +745,82 @@ class DashDesignQtApp(QMainWindow):
             QMessageBox.StandardButton.Yes,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            QDesktopServices.openUrl(QUrl(str(download_url)))
+            QDesktopServices.openUrl(QUrl(info.url))
+
+    def _offer_windows_auto_update(self, info: UpdateInfo) -> None:
+        message = self._update_prompt(
+            info, "\n\n是否现在下载并安装？安装程序会关闭 DashDesign 并完成更新。"
+        )
+        reply = QMessageBox.question(
+            self,
+            "发现更新",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._start_update_download(info)
+
+    def _start_update_download(self, info: UpdateInfo) -> None:
+        self._update_cancelled = False
+        dialog = QProgressDialog("正在下载更新…", "取消", 0, info.size or 0, self)
+        dialog.setWindowTitle("下载更新")
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.setAutoClose(False)
+        dialog.setAutoReset(False)
+        dialog.setMinimumDuration(0)
+        if not info.size:
+            dialog.setRange(0, 0)  # 未知总量：显示忙碌指示条
+        dialog.canceled.connect(self._cancel_update_download)
+        self._update_dialog = dialog
+        dialog.show()
+        download_update(info, self.download_signals, lambda: self._update_cancelled)
+
+    def _cancel_update_download(self) -> None:
+        # 只置标志；工作线程会抛 DownloadCancelled 并发 cancelled 信号收尾。
+        self._update_cancelled = True
+        self.statusBar().showMessage("正在取消更新下载…")
+
+    def _on_update_progress(self, downloaded: int, total: int) -> None:
+        dialog = self._update_dialog
+        if dialog is None:
+            return
+        mb = downloaded / (1024 * 1024)
+        if total > 0:
+            if dialog.maximum() != total:
+                dialog.setRange(0, total)
+            dialog.setValue(downloaded)
+            dialog.setLabelText(f"正在下载更新… {mb:.1f} / {total / (1024 * 1024):.1f} MB")
+        else:
+            dialog.setLabelText(f"正在下载更新… {mb:.1f} MB")
+
+    def _close_update_dialog(self) -> None:
+        if self._update_dialog is not None:
+            self._update_dialog.close()
+            self._update_dialog = None
+
+    def _on_update_downloaded(self, path: str) -> None:
+        self._close_update_dialog()
+        if self._update_cancelled:
+            # 取消与完成竞态：下载刚好在取消前完成也不要启动安装程序。
+            return
+        if not installer.launch_windows_installer(Path(path)):
+            QMessageBox.warning(
+                self,
+                "启动安装程序失败",
+                f"更新已下载到：\n{path}\n\n请手动运行该安装程序完成更新。",
+            )
+            return
+        self.banner.show_message("info", "已下载新版本，正在启动安装程序…", timeout_ms=3000)
+        QTimer.singleShot(300, QApplication.quit)
+
+    def _on_update_error(self, message: str) -> None:
+        self._close_update_dialog()
+        QMessageBox.warning(self, "下载更新失败", message)
+
+    def _on_update_cancelled(self) -> None:
+        self._close_update_dialog()
+        self.statusBar().showMessage("已取消更新下载")
 
     def handle_update_error(self, message: str, silent: bool) -> None:
         self.statusBar().showMessage("更新检查失败")

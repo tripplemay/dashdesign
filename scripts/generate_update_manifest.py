@@ -31,17 +31,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    platforms: dict[str, dict[str, str]] = {}
+    platforms: dict[str, dict[str, object]] = {}
 
     if args.macos_url:
         platforms["macos"] = {"url": args.macos_url}
         if args.macos_file and args.macos_file.exists():
             platforms["macos"]["sha256"] = sha256_file(args.macos_file)
+            platforms["macos"]["size"] = args.macos_file.stat().st_size
 
     if args.windows_url:
         platforms["windows"] = {"url": args.windows_url}
         if args.windows_file and args.windows_file.exists():
             platforms["windows"]["sha256"] = sha256_file(args.windows_file)
+            platforms["windows"]["size"] = args.windows_file.stat().st_size
 
     manifest = {
         "version": args.version.lstrip("v"),
