@@ -1,5 +1,13 @@
 # Baseline Cloud API Contract (Phase B)
 
+> **Status: implemented.** Server: `cloud/server/` (FastAPI + SQLAlchemy JSONB +
+> token/role auth + ETag optimistic concurrency + server-side governance/publish
+> gate + merge jobs). Desktop client: `cloud/client.py`
+> (`HttpBaselineRepository`, `requests`-only, local read-cache). GUI wiring:
+> `ui/baseline_service.py` selects the repository by config; the cloud endpoint +
+> token are set in **文件 → 设置 → 云端基线** (`ui/api_config.py`). Deploy notes:
+> [DEPLOY.md](./DEPLOY.md). Tests: `tests/test_cloud_{store,api,client}.py`.
+
 Phase A ships the baseline system fully local: `baseline/` (Qt-free domain) +
 `ui/baseline_service.py` (GUI bridge). The desktop client depends only on the
 `BaselineRepository` surface. Phase B replaces the filesystem repository with a

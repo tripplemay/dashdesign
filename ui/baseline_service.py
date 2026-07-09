@@ -18,9 +18,12 @@ from PySide6.QtCore import QSettings, QStandardPaths
 from app_runtime import baseline_path as bundled_baseline_path
 from baseline.seed import seed_if_empty
 from baseline.store import BaselineRepository, ProjectInfo
+from ui import api_config
 
 _ACTIVE_KEY = "baseline/active_project"
-_repo: Optional[BaselineRepository] = None
+# Either a local BaselineRepository or a cloud HttpBaselineRepository (same
+# duck-typed surface); chosen by whether a cloud endpoint + token are configured.
+_repo: Optional[Any] = None
 
 
 def _store_root() -> Path:
@@ -28,12 +31,31 @@ def _store_root() -> Path:
     return Path(base) / "baselines"
 
 
-def repository() -> BaselineRepository:
+def _cloud_cache_root() -> Path:
+    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    return Path(base) / "baseline_cloud_cache"
+
+
+def repository() -> Any:
     global _repo
     if _repo is None:
-        _repo = BaselineRepository(_store_root())
-        seed_if_empty(_repo)
+        if api_config.has_cloud():
+            # Cloud mode: the server owns seeding + governance; no local seed.
+            from cloud.client import HttpBaselineRepository
+
+            _repo = HttpBaselineRepository(
+                api_config.load_cloud_url(), api_config.load_cloud_token(), _cloud_cache_root()
+            )
+        else:
+            _repo = BaselineRepository(_store_root())
+            seed_if_empty(_repo)
     return _repo
+
+
+def reset_repository() -> None:
+    """Drop the cached repository so a changed cloud config takes effect."""
+    global _repo
+    _repo = None
 
 
 def projects() -> List[ProjectInfo]:

@@ -54,6 +54,11 @@ GUI_HIDDEN_IMPORTS = [
     "jsonschema",
     "pypdfium2",
     "docx",
+    # Phase B cloud client is lazy-imported in ui.baseline_service (only when a
+    # cloud endpoint is configured), so PyInstaller's static analysis misses it.
+    # It needs only `requests` (already bundled); the server package is excluded.
+    "cloud",
+    "cloud.client",
 ]
 # 基线摄取/校验依赖：pypdfium2 带原生 pdfium 二进制、python-docx 带 default.docx
 # 模板、jsonschema 需 metadata——用 collect_all 一次性收 datas/binaries/hiddenimports。
@@ -96,6 +101,12 @@ COMMON_EXCLUDES = [
     "matplotlib",
     "pytest",
     "setuptools.tests",
+    # Server-only backend must never be pulled into the desktop bundle.
+    "cloud.server",
+    "fastapi",
+    "sqlalchemy",
+    "uvicorn",
+    "mangum",
 ]
 
 

@@ -15,6 +15,11 @@ from PySide6.QtCore import QSettings
 _BASE_URL_KEY = "api/base_url"
 _API_KEY_KEY = "api/key"
 _BASELINE_MODEL_KEY = "api/baseline_model"
+# Phase B: baseline cloud endpoint + bearer token. When both are set the desktop
+# app talks to the cloud repository (shared, multi-user); otherwise it uses the
+# local filesystem repository. Stored per-user in QSettings like the image key.
+_CLOUD_URL_KEY = "baseline/cloud_url"
+_CLOUD_TOKEN_KEY = "baseline/cloud_token"
 
 # 文档合并抽取用的文本模型。默认取一个通用 OpenAI 文本模型；不同网关支持的
 # 模型不同（有的只支持 OpenAI 系），用户可在“设置”里改成自己网关支持的名字。
@@ -43,3 +48,22 @@ def save(base_url: str, api_key: str, baseline_model: str = "") -> None:
 def has_api_key() -> bool:
     """A key is available if it is persisted or present in the inherited env."""
     return bool(load_api_key() or os.environ.get("OPENAI_API_KEY", "").strip())
+
+
+def load_cloud_url() -> str:
+    return str(QSettings().value(_CLOUD_URL_KEY, "") or "").strip()
+
+
+def load_cloud_token() -> str:
+    return str(QSettings().value(_CLOUD_TOKEN_KEY, "") or "").strip()
+
+
+def save_cloud(cloud_url: str, cloud_token: str) -> None:
+    settings = QSettings()
+    settings.setValue(_CLOUD_URL_KEY, cloud_url.strip())
+    settings.setValue(_CLOUD_TOKEN_KEY, cloud_token.strip())
+
+
+def has_cloud() -> bool:
+    """The cloud repository is used only when both endpoint and token are set."""
+    return bool(load_cloud_url() and load_cloud_token())

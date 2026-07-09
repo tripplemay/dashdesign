@@ -32,11 +32,12 @@ jobs:
           python -m pip install -r requirements.txt -r requirements-desktop.txt
           python -m pip install -r requirements-packaging.txt
           python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements-cloud.txt
 
       - name: Compile Python files
         shell: bash
         run: |
-          python -m py_compile desktop_qt_app.py desktop_tool.py dashdesign_worker.py app_runtime.py ui/*.py ui/pages/*.py ui/widgets/*.py scripts/*.py
+          python -m py_compile desktop_qt_app.py desktop_tool.py dashdesign_worker.py app_runtime.py ui/*.py ui/pages/*.py ui/widgets/*.py scripts/*.py cloud/*.py cloud/server/*.py
 
       - name: Run unit tests
         shell: bash

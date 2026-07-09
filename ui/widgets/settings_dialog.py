@@ -34,6 +34,7 @@ class SettingsDialog(QDialog):
         layout.setSpacing(12)
 
         layout.addWidget(self._build_api_group())
+        layout.addWidget(self._build_cloud_group())
         layout.addWidget(self._build_appearance_group())
 
         buttons = QDialogButtonBox(
@@ -72,6 +73,28 @@ class SettingsDialog(QDialog):
         grid.setColumnStretch(1, 1)
         return group
 
+    def _build_cloud_group(self) -> QGroupBox:
+        group = QGroupBox("云端基线（可选）")
+        grid = QGridLayout(group)
+        self.cloud_url_edit = QLineEdit(api_config.load_cloud_url())
+        self.cloud_url_edit.setPlaceholderText("云端基线服务地址，如 https://baseline.example.com")
+        self.cloud_token_edit = QLineEdit(api_config.load_cloud_token())
+        self.cloud_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.cloud_token_edit.setPlaceholderText("访问令牌（Bearer Token）")
+        hint = QLabel(
+            "同时填写地址与令牌后，基线改为云端存储（多人共享、多项目并行、服务端治理）。"
+            "留空则使用本机基线库。修改后立即生效。"
+        )
+        hint.setObjectName("Subtitle")
+        hint.setWordWrap(True)
+        grid.addWidget(QLabel("服务地址"), 0, 0)
+        grid.addWidget(self.cloud_url_edit, 0, 1)
+        grid.addWidget(QLabel("访问令牌"), 1, 0)
+        grid.addWidget(self.cloud_token_edit, 1, 1)
+        grid.addWidget(hint, 2, 0, 1, 2)
+        grid.setColumnStretch(1, 1)
+        return group
+
     def _build_appearance_group(self) -> QGroupBox:
         group = QGroupBox("外观")
         box = QVBoxLayout(group)
@@ -95,6 +118,11 @@ class SettingsDialog(QDialog):
 
     def _on_save(self) -> None:
         api_config.save(self.base_url_edit.text(), self.api_key_edit.text(), self.model_edit.text())
+        api_config.save_cloud(self.cloud_url_edit.text(), self.cloud_token_edit.text())
+        # A changed cloud endpoint/token must swap the active repository.
+        from ui import baseline_service
+
+        baseline_service.reset_repository()
         self.accept()
 
     def _on_cancel(self) -> None:
