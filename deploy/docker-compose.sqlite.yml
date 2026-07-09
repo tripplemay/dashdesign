@@ -1,0 +1,32 @@
+# Minimal single-container deployment: FastAPI + SQLite on a volume.
+# For small teams / memory-constrained boxes — no separate Postgres, no Caddy.
+#   cd deploy && cp .env.example .env      # set BASELINE_ADMIN_TOKEN
+#   docker compose -f docker-compose.sqlite.yml up -d --build
+#
+# Binds to 127.0.0.1:8000 only — reachable from the host (and via the host's own
+# nginx reverse proxy), never exposed directly to the public internet.
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      BASELINE_DB_URL: sqlite:////data/baseline.db
+      BASELINE_ADMIN_TOKEN: ${BASELINE_ADMIN_TOKEN:?set BASELINE_ADMIN_TOKEN in .env}
+      BASELINE_DOC_STORE: local
+      BASELINE_DOC_ROOT: /data/documents
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DASHDESIGN_BASELINE_MODEL: ${DASHDESIGN_BASELINE_MODEL:-gpt-4o}
+    volumes:
+      - baseline-data:/data
+    # One worker: light on RAM and the right fit for SQLite (no write contention).
+    command: ["uvicorn", "cloud.server.asgi:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    # Cap memory so a runaway can never starve the host's other services.
+    mem_limit: 512m
+
+volumes:
+  baseline-data:

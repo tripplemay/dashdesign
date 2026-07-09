@@ -137,8 +137,10 @@ class Membership(Base):
 def make_engine(db_url: str):
     kwargs: dict[str, Any] = {"future": True}
     if db_url.startswith("sqlite"):
-        # Allow the pooled connection to be shared across FastAPI's threadpool.
-        kwargs["connect_args"] = {"check_same_thread": False}
+        # Allow the pooled connection to be shared across FastAPI's threadpool,
+        # and wait (not error) up to 30s if another writer holds the lock — the
+        # small-team file-SQLite deployment can have brief write contention.
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
         # In-memory SQLite must keep a single connection or tables vanish.
         if ":memory:" in db_url or db_url in ("sqlite://", "sqlite:///:memory:"):
             from sqlalchemy.pool import StaticPool
