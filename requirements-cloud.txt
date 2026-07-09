@@ -13,4 +13,5 @@ mangum>=0.17,<0.18
 # Managed Postgres driver (prod). SQLite (stdlib) is used for local/dev/tests.
 psycopg[binary]>=3.1,<4; platform_system != "Windows"
 # Object storage (OSS) for uploaded documents is optional; the default document
-# store is the local filesystem. Install the vendor SDK in the deploy image.
+# store is the local filesystem. Needed only when BASELINE_DOC_STORE=oss.
+oss2>=2.18,<3; platform_system == "Linux"

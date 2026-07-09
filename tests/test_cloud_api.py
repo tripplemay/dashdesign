@@ -43,7 +43,7 @@ def app_ctx(tmp_path):
     )
     settings = Settings(
         db_url="sqlite://", doc_store="local", doc_root=tmp_path / "docs",
-        oss_bucket="", oss_prefix="p/", admin_token=_ADMIN, seed_demo=False,
+        oss_bucket="", oss_endpoint="", oss_prefix="p/", admin_token=_ADMIN, seed_demo=False,
     )
     app = create_app(settings=settings, engine=engine, chat_factory=lambda model: _fake_chat)
     return app

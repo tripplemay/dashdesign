@@ -20,7 +20,7 @@ from baseline.llm import make_chat
 
 from cloud.server import auth, db, mergejobs, schemas
 from cloud.server.config import Settings, load_settings
-from cloud.server.docstore import LocalDocumentStore
+from cloud.server.docstore import build_document_store
 from cloud.server.store import ConflictError, NotFoundError, SqlBaselineStore
 
 # --- domain-exception -> HTTP mapping -----------------------------------
@@ -64,7 +64,7 @@ def create_app(
     engine = engine or db.make_engine(settings.db_url)
     db.create_all(engine)
     session_factory = db.make_session_factory(engine)
-    doc_store = LocalDocumentStore(settings.doc_root)
+    doc_store = build_document_store(settings)
     chat_factory = chat_factory or _default_chat_factory
 
     app = FastAPI(title="DashDesign Baseline Cloud", version="1.0")

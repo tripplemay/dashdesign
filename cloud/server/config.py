@@ -23,6 +23,7 @@ class Settings:
     doc_store: str  # "local" | "oss"
     doc_root: Path
     oss_bucket: str
+    oss_endpoint: str
     oss_prefix: str
     admin_token: str  # optional bootstrap token -> a global-admin principal
     seed_demo: bool
@@ -38,6 +39,7 @@ def load_settings() -> Settings:
         doc_store=_env("BASELINE_DOC_STORE", "local").lower(),
         doc_root=Path(_env("BASELINE_DOC_ROOT", "./baseline_documents")).expanduser(),
         oss_bucket=_env("BASELINE_OSS_BUCKET"),
+        oss_endpoint=_env("BASELINE_OSS_ENDPOINT"),
         oss_prefix=_env("BASELINE_OSS_PREFIX", "baseline-docs/"),
         admin_token=_env("BASELINE_ADMIN_TOKEN"),
         seed_demo=_env("BASELINE_SEED_DEMO", "").lower() in ("1", "true", "yes"),

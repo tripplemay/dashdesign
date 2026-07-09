@@ -1,0 +1,5 @@
+# Terminates TLS (auto Let's Encrypt cert for SITE_DOMAIN) and proxies to the
+# API container. The API itself never publishes a port in the tls profile.
+{$SITE_DOMAIN} {
+	reverse_proxy api:8000
+}

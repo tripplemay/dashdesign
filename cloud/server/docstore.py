@@ -58,3 +58,36 @@ class OSSDocumentStore:
         key = f"{self._prefix}{baseline_id}/{doc_id}/{Path(filename).name or 'document'}"
         self._client.put_object(key, data)
         return f"oss://{self._bucket}/{key}"
+
+
+class _Oss2BucketClient:
+    """Adapts an ``oss2.Bucket`` to the ``put_object(key, data)`` shape."""
+
+    def __init__(self, bucket) -> None:
+        self._bucket = bucket
+
+    def put_object(self, key: str, data: bytes) -> None:
+        self._bucket.put_object(key, data)
+
+
+def build_document_store(settings) -> DocumentStore:
+    """Select the document store by config: ``local`` (default) or ``oss`` (Aliyun).
+
+    OSS credentials are read from the standard Aliyun env vars
+    (``ALIBABA_CLOUD_ACCESS_KEY_ID`` / ``ALIBABA_CLOUD_ACCESS_KEY_SECRET`` or a
+    RAM role) via oss2's provider chain — never from our own config — so no
+    secret is stored by this app. ``oss2`` is imported lazily so it is required
+    only when OSS is actually selected.
+    """
+    if settings.doc_store == "oss":
+        if not settings.oss_bucket or not settings.oss_endpoint:
+            raise RuntimeError(
+                "BASELINE_DOC_STORE=oss 需要同时配置 BASELINE_OSS_BUCKET 与 BASELINE_OSS_ENDPOINT"
+            )
+        import oss2
+        from oss2.credentials import EnvironmentVariableCredentialsProvider
+
+        auth = oss2.ProviderAuth(EnvironmentVariableCredentialsProvider())
+        bucket = oss2.Bucket(auth, settings.oss_endpoint, settings.oss_bucket)
+        return OSSDocumentStore(_Oss2BucketClient(bucket), settings.oss_bucket, settings.oss_prefix)
+    return LocalDocumentStore(settings.doc_root)

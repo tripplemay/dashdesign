@@ -1,0 +1,69 @@
+# Always-on baseline cloud on a single Aliyun ECS box.
+#   cd deploy && cp .env.example .env && edit .env
+#   docker compose up -d --build                 # HTTP on :8000 (test only)
+#   docker compose --profile tls up -d --build   # HTTPS via Caddy (production)
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: baseline
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_DB: baseline
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U baseline"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      BASELINE_DB_URL: postgresql+psycopg://baseline:${DB_PASSWORD}@db:5432/baseline
+      BASELINE_ADMIN_TOKEN: ${BASELINE_ADMIN_TOKEN:?set BASELINE_ADMIN_TOKEN in .env}
+      BASELINE_DOC_STORE: ${BASELINE_DOC_STORE:-local}
+      BASELINE_DOC_ROOT: /data/documents
+      BASELINE_OSS_BUCKET: ${BASELINE_OSS_BUCKET:-}
+      BASELINE_OSS_ENDPOINT: ${BASELINE_OSS_ENDPOINT:-}
+      ALIBABA_CLOUD_ACCESS_KEY_ID: ${ALIBABA_CLOUD_ACCESS_KEY_ID:-}
+      ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DASHDESIGN_BASELINE_MODEL: ${DASHDESIGN_BASELINE_MODEL:-gpt-4o}
+    volumes:
+      - docdata:/data/documents
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    # Quick HTTP test only (tokens travel in cleartext — lock the security group
+    # to your IP). For production use the `tls` profile below instead.
+    ports:
+      - "8000:8000"
+
+  # Auto-HTTPS reverse proxy. Enable with `--profile tls`; needs SITE_DOMAIN's
+  # A-record pointing at this ECS public IP and ports 80/443 open.
+  caddy:
+    image: caddy:2
+    profiles: ["tls"]
+    depends_on: [api]
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env for TLS}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  docdata:
+  caddydata:
+  caddyconfig:

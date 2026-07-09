@@ -52,7 +52,7 @@ def live_base(tmp_path):
     port = _free_port()
     settings = Settings(
         db_url=f"sqlite:///{tmp_path / 'cloud.db'}", doc_store="local",
-        doc_root=tmp_path / "docs", oss_bucket="", oss_prefix="p/",
+        doc_root=tmp_path / "docs", oss_bucket="", oss_endpoint="", oss_prefix="p/",
         admin_token=_ADMIN, seed_demo=False,
     )
     app = create_app(settings=settings, chat_factory=lambda model: _fake_chat)

@@ -1,0 +1,10 @@
+# Baseline-domain runtime deps for the cloud SERVER image — the subset of
+# requirements.txt the server actually imports (no numpy/opencv/pillow/qrcode:
+# the server import chain never loads them, verified). Install alongside
+# requirements-cloud.txt. All permissive-licensed and manylinux-wheel'd, so the
+# image needs no extra system libraries.
+jsonschema>=4,<5
+pypdfium2>=4,<5
+python-docx>=1,<2
+requests==2.32.4
+urllib3==1.26.20
