@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from baseline.errors import BaselineError
 from baseline.newproject import prepare_new_baseline
-from baseline.store import today_str
+from baseline.store import is_valid_baseline_id, normalize_baseline_id, today_str
 from ui import baseline_service
 
 
@@ -139,12 +139,33 @@ class NewProjectDialog(QDialog):
 
     def _on_create(self) -> None:
         name = self.name_edit.text().strip()
-        baseline_id = self.id_edit.text().strip()
+        raw_id = self.id_edit.text().strip()
         if not name:
             QMessageBox.warning(self, "缺少项目名称", "请填写项目名称。")
             return
-        if not baseline_id:
+        if not raw_id:
             QMessageBox.warning(self, "缺少项目标识", "请填写项目标识（baseline_id）。")
+            return
+        # 前置规范化 + 校验：把输入统一成可存储的小写 slug（DASHaicourse ->
+        # dashaicourse），并在调用 LLM/创建之前拦截非法值，避免“从文档生成”白等。
+        baseline_id = normalize_baseline_id(raw_id)
+        if not is_valid_baseline_id(baseline_id):
+            QMessageBox.warning(
+                self,
+                "项目标识不合法",
+                "项目标识只能包含小写字母、数字、连字符 - 和下划线 _，长度 3–81 字符，"
+                "且首字符为字母或数字。\n请改用例如 dashaicourse 或 kids_coding_course 这样的标识。",
+            )
+            return
+        # 前置重名检查：唯一性最终由 create_project 兜底，但提前拦下常见重名，避免
+        # “从文档生成”白跑一次 LLM 才发现 id 已存在（大小写折叠会让 DASHaicourse 撞上
+        # 已有的 dashaicourse，更需前置拦截）。store 仍是权威来源。
+        if any(info.baseline_id == baseline_id for info in baseline_service.projects()):
+            QMessageBox.warning(
+                self,
+                "项目标识已存在",
+                f"已存在项目标识「{baseline_id}」，请换一个唯一的标识。",
+            )
             return
         if self.generate_radio.isChecked():
             # 从文档生成需要调 LLM，交给调用方异步处理（此处仅收集请求）

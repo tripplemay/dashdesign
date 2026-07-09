@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from baseline import governance, versioning
 from baseline.errors import BaselineError, GovernanceError, ValidationError
 from baseline.schema import validation_errors
-from baseline.store import _BASELINE_ID_RE, today_str
+from baseline.store import is_valid_baseline_id, today_str
 
 from cloud.server import db
 from cloud.server.docstore import DocumentStore, content_hash
@@ -84,7 +84,7 @@ class SqlBaselineStore:
 
     def create_project(self, baseline: dict, owner_user_id: str, org_id: str = "default") -> db.Project:
         baseline_id = str(baseline.get("baseline_id", ""))
-        if not _BASELINE_ID_RE.match(baseline_id):
+        if not is_valid_baseline_id(baseline_id):
             raise BaselineError(f"非法 baseline_id：{baseline_id!r}")
         if self.get_project(baseline_id) is not None:
             raise ConflictError(f"项目已存在：{baseline_id}")

@@ -24,7 +24,33 @@ from baseline import governance, versioning
 from baseline.errors import BaselineError, GovernanceError, ValidationError
 from baseline.schema import validation_errors
 
-_BASELINE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{2,80}$")
+# 末尾用 \Z 而非 $：Python 的 $ 会匹配到结尾换行符之前，导致 "aicourse\n" 之类
+# 带尾随换行的值被误判合法。cloud 端把本函数当作权威信任边界（不做规范化），必须严格。
+_BASELINE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{2,80}\Z")
+
+
+def is_valid_baseline_id(value: str) -> bool:
+    """True if ``value`` is directly storable as a baseline_id.
+
+    The id doubles as a directory name, so it is kept to a lowercase slug
+    (letter/digit first, then letters/digits/``-``/``_``, 3–81 chars) to stay
+    consistent across case-sensitive and case-insensitive filesystems.
+    """
+    return bool(_BASELINE_ID_RE.match(value))
+
+
+def normalize_baseline_id(raw: str) -> str:
+    """Best-effort slugify user-entered text into the storable id form.
+
+    Lowercases, collapses any run of unsupported characters into a single
+    ``_``, and trims leading/trailing separators so the first character is a
+    letter or digit. Already-valid ``-``/``_`` are preserved. Input without any
+    usable latin/digit characters (e.g. all CJK/punctuation) normalizes to an
+    empty or too-short string; callers should follow up with
+    :func:`is_valid_baseline_id` rather than assume the result is storable.
+    """
+    slug = re.sub(r"[^a-z0-9_-]+", "_", raw.strip().lower())
+    return slug.strip("-_")[:81]
 
 
 def today_str() -> str:
@@ -87,7 +113,7 @@ class BaselineRepository:
 
     def create_project(self, baseline: dict) -> ProjectInfo:
         baseline_id = str(baseline.get("baseline_id", ""))
-        if not _BASELINE_ID_RE.match(baseline_id):
+        if not is_valid_baseline_id(baseline_id):
             raise BaselineError(f"非法 baseline_id：{baseline_id!r}")
         if self._meta_path(baseline_id).exists():
             raise BaselineError(f"项目已存在：{baseline_id}")
