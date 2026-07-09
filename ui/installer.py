@@ -48,13 +48,23 @@ def is_installed_build(directory: Optional[Path] = None) -> bool:
 
 
 def launch_windows_installer(setup_exe: Path) -> bool:
-    """Start the downloaded Inno Setup installer detached; return True on success.
+    """Start the downloaded Inno Setup installer; return True on success.
 
-    The caller should quit the app immediately afterwards so files unlock. The
+    The installer targets Program Files, so its manifest requests
+    ``requireAdministrator``. ``QProcess``/``CreateProcess`` cannot elevate — it
+    fails with ERROR_ELEVATION_REQUIRED and the installer never appears (the bug
+    v0.3.0/v0.3.1 shipped). ``ShellExecute`` (via ``os.startfile``) honours the
+    manifest, raises the UAC prompt and launches the installer elevated.
+
+    The caller should quit the app immediately afterwards so files unlock; the
     new setup.exe carries CloseApplications/RestartApplications and a
     post-install ``Launch DashDesign`` step to bring the app back up.
     """
-    from PySide6.QtCore import QProcess
+    import os
 
-    started, _pid = QProcess.startDetached(str(Path(setup_exe)), [])
-    return bool(started)
+    try:
+        os.startfile(str(Path(setup_exe)))  # noqa: S606 — ShellExecute; elevates per manifest
+    except OSError:
+        # startfile raises on a failed/declined launch (e.g. UAC cancelled).
+        return False
+    return True
