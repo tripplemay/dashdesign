@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app_runtime import PROJECT_ROOT
+from ui.output_paths import default_output, restore_output
 from ui import api_config, baseline_service
 from ui.commands import TextImageForm
 from ui.scene_prompts import ScenePrompt, load_scene_prompts
@@ -242,7 +242,7 @@ class TextImagePage(QWidget):
         path_layout = QVBoxLayout(paths)
         self.t2i_output = PathField(
             "输出目录",
-            str(PROJECT_ROOT / "workflow_samples" / "text_to_image_print_qt"),
+            default_output("workflow_samples", "text_to_image_print_qt"),
             "dir",
         )
         self.baseline_label = QLabel("")
@@ -368,7 +368,13 @@ class TextImagePage(QWidget):
         # 提示词/文案属于单次运行输入，不持久化；API 凭据由 ui.api_config 统一持久化。
 
     def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
-        self.t2i_output.setText(str(settings.value("pages/t2i/output_dir", self.t2i_output.text())))
+        self.t2i_output.setText(
+            restore_output(
+                str(settings.value("pages/t2i/output_dir", "")),
+                "workflow_samples",
+                "text_to_image_print_qt",
+            )
+        )
         for combo, key in (
             (self.t2i_mode, "pages/t2i/mode"),
             (self.t2i_purpose_template, "pages/t2i/purpose_template"),

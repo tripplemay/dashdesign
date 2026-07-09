@@ -12,6 +12,7 @@ import os
 import runpy
 import sys
 from pathlib import Path
+from typing import Iterable, List
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 APP_ROOT = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT)).resolve()
@@ -54,6 +55,51 @@ APP_VERSION = read_app_version()
 
 def is_packaged() -> bool:
     return bool(getattr(sys, "frozen", False))
+
+
+def install_roots() -> List[Path]:
+    """Read-only roots of a packaged install; empty for dev runs (writable).
+
+    A packaged build lives under a read-only dir (Program Files on Windows), so
+    output paths that resolve inside it cannot be created. Dev runs keep writing
+    under the project root, which is writable.
+    """
+    if not is_packaged():
+        return []
+    roots = {APP_ROOT, PROJECT_ROOT}
+    try:
+        roots.add(Path(sys.executable).resolve().parent)
+    except (OSError, ValueError):
+        pass
+    return list(roots)
+
+
+def path_is_within(path: str, roots: Iterable[Path]) -> bool:
+    """True when ``path`` resolves to a location inside any of ``roots``."""
+    if not path:
+        return False
+    try:
+        resolved = Path(path).resolve()
+    except (OSError, ValueError):
+        return False
+    for root in roots:
+        try:
+            resolved.relative_to(Path(root).resolve())
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def resolve_output_dir(saved: str, base: Path, *parts: str) -> str:
+    """Return ``saved`` unless it is empty or inside the packaged read-only
+    install tree, in which case fall back to ``base/<parts>`` (a writable
+    per-user default). This both seeds fresh installs and migrates a stale path
+    a previous build persisted under the (now read-only) install dir.
+    """
+    if saved and not path_is_within(saved, install_roots()):
+        return saved
+    return str(base.joinpath(*parts))
 
 
 def worker_prefix() -> list[str]:

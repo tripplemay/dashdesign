@@ -10,6 +10,9 @@ from app_runtime import (
     evidenced_text,
     first_image,
     first_output_image,
+    install_roots,
+    path_is_within,
+    resolve_output_dir,
     text_list,
     version_tuple,
     worker_prefix,
@@ -109,3 +112,42 @@ class TestFirstOutputImage:
 
     def test_empty_directory_returns_none(self, tmp_path: Path) -> None:
         assert first_output_image(tmp_path) is None
+
+
+class TestPathIsWithin:
+    def test_direct_child(self, tmp_path: Path) -> None:
+        child = tmp_path / "sub"
+        assert path_is_within(str(child), [tmp_path]) is True
+
+    def test_nested_descendant(self, tmp_path: Path) -> None:
+        nested = tmp_path / "a" / "b" / "c"
+        assert path_is_within(str(nested), [tmp_path]) is True
+
+    def test_root_itself(self, tmp_path: Path) -> None:
+        assert path_is_within(str(tmp_path), [tmp_path]) is True
+
+    def test_outside_root(self, tmp_path: Path) -> None:
+        outside = tmp_path.parent / "definitely-elsewhere-xyz"
+        assert path_is_within(str(outside), [tmp_path]) is False
+
+    def test_empty_path(self, tmp_path: Path) -> None:
+        assert path_is_within("", [tmp_path]) is False
+
+    def test_no_roots(self, tmp_path: Path) -> None:
+        assert path_is_within(str(tmp_path), []) is False
+
+
+class TestResolveOutputDir:
+    def test_dev_run_has_no_readonly_roots(self) -> None:
+        # 非打包运行时安装目录可写，install_roots 应为空。
+        assert install_roots() == []
+
+    def test_keeps_saved_when_writable(self, tmp_path: Path) -> None:
+        saved = str(tmp_path / "my-outputs")
+        assert resolve_output_dir(saved, tmp_path / "base", "sub") == saved
+
+    def test_falls_back_when_empty(self, tmp_path: Path) -> None:
+        base = tmp_path / "base"
+        assert resolve_output_dir("", base, "workflow_samples", "t2i") == str(
+            base / "workflow_samples" / "t2i"
+        )

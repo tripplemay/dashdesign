@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app_runtime import PROJECT_ROOT
+from ui.output_paths import default_output, restore_output
 from ui.commands import QrForm
 from ui.utils import scrollable_page_layout
 from ui.widgets import PathField
@@ -31,7 +31,7 @@ class QrPage(QWidget):
         paths = QGroupBox("输入输出")
         path_layout = QVBoxLayout(paths)
         self.qr_input = PathField("输入图片", "", "file", placeholder="拖入或选择需要清除二维码的图片")
-        self.qr_output = PathField("输出目录", str(PROJECT_ROOT / "single_no_qr_desktop_qt"), "dir")
+        self.qr_output = PathField("输出目录", default_output("single_no_qr_desktop_qt"), "dir")
         path_layout.addWidget(self.qr_input)
         path_layout.addWidget(self.qr_output)
         layout.addWidget(paths)
@@ -104,6 +104,8 @@ class QrPage(QWidget):
         settings.setValue("pages/qr/radius", self.qr_radius.value())
 
     def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
-        self.qr_output.setText(str(settings.value("pages/qr/output_dir", self.qr_output.text())))
+        self.qr_output.setText(
+            restore_output(str(settings.value("pages/qr/output_dir", "")), "single_no_qr_desktop_qt")
+        )
         self.qr_margin.setValue(settings.value("pages/qr/margin", self.qr_margin.value(), type=float))
         self.qr_radius.setValue(settings.value("pages/qr/radius", self.qr_radius.value(), type=int))

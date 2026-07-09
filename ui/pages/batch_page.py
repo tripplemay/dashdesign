@@ -20,7 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app_runtime import PROJECT_ROOT, first_image, runtime_tool_path
+from app_runtime import first_image, runtime_tool_path
+from ui.output_paths import default_output, restore_output
 from ui.commands import BatchForm
 from ui.utils import scrollable_page_layout
 from ui.widgets import PathField
@@ -45,7 +46,7 @@ class BatchPage(QWidget):
             "dir",
             placeholder="选择包含源图片的目录（文件名需含尺寸，如 200乘以80）",
         )
-        self.batch_output = PathField("输出目录", str(PROJECT_ROOT / "print_ready_desktop_qt"), "dir")
+        self.batch_output = PathField("输出目录", default_output("print_ready_desktop_qt"), "dir")
         path_layout.addWidget(self.batch_input)
         path_layout.addWidget(self.batch_output)
         hint = QLabel("仅处理 jpg/jpeg/png；物理尺寸从文件名解析（如“200乘以80”= 200cm×80cm），请勿改名。")
@@ -192,7 +193,9 @@ class BatchPage(QWidget):
 
     def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
         self.batch_input.setText(str(settings.value("pages/batch/input_dir", self.batch_input.text())))
-        self.batch_output.setText(str(settings.value("pages/batch/output_dir", self.batch_output.text())))
+        self.batch_output.setText(
+            restore_output(str(settings.value("pages/batch/output_dir", "")), "print_ready_desktop_qt")
+        )
         if settings.value("pages/batch/style_mode", True, type=bool):
             self.style_radio.setChecked(True)
         else:

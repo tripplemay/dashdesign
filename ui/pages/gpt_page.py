@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app_runtime import PROJECT_ROOT
+from ui.output_paths import default_output, restore_output
 from ui import api_config
 from ui.commands import GptForm
 from ui.utils import scrollable_page_layout
@@ -38,7 +38,7 @@ class GptPage(QWidget):
         self.gpt_source = PathField("源图片", "", "file", placeholder="拖入或选择需要重建的海报图")
         self.gpt_output = PathField(
             "输出目录",
-            str(PROJECT_ROOT / "workflow_samples" / "desktop_gpt_image_rebuild_qt"),
+            default_output("workflow_samples", "desktop_gpt_image_rebuild_qt"),
             "dir",
         )
         path_layout.addWidget(self.gpt_source)
@@ -115,7 +115,13 @@ class GptPage(QWidget):
         settings.setValue("pages/gpt/dpi", self.gpt_dpi.value())
 
     def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
-        self.gpt_output.setText(str(settings.value("pages/gpt/output_dir", self.gpt_output.text())))
+        self.gpt_output.setText(
+            restore_output(
+                str(settings.value("pages/gpt/output_dir", "")),
+                "workflow_samples",
+                "desktop_gpt_image_rebuild_qt",
+            )
+        )
         mode = settings.value("pages/gpt/mode")
         if mode is not None:
             index = self.gpt_mode.findData(str(mode))
