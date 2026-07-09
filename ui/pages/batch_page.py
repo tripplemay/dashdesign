@@ -29,8 +29,10 @@ from ui.widgets import PathField
 # 与 scripts/prepare_print_assets.py 的 discover_sources 保持一致：
 # 只处理这三种扩展名，且文件名必须含 "NNN乘以NNN" 物理尺寸；
 # --only 支持精确文件名或 shell 通配符（fnmatch）。
+# _SIZE_RE 必须与 prepare_print_assets.SIZE_RE 字面一致（两处独立定义，改一处
+# 务必同步另一处）。接受 乘/乘以/x/×/* 分隔符；刻意不收 -、_ 以免误吃日期。
 _SCRIPT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
-_SIZE_RE = re.compile(r"(\d+)\s*乘(?:以)?\s*(\d+)")
+_SIZE_RE = re.compile(r"(\d+)\s*(?:乘以|乘|[xX*×])\s*(\d+)")
 
 
 class BatchPage(QWidget):
@@ -49,7 +51,7 @@ class BatchPage(QWidget):
         self.batch_output = PathField("输出目录", default_output("print_ready_desktop_qt"), "dir")
         path_layout.addWidget(self.batch_input)
         path_layout.addWidget(self.batch_output)
-        hint = QLabel("仅处理 jpg/jpeg/png；物理尺寸从文件名解析（如“200乘以80”= 200cm×80cm），请勿改名。")
+        hint = QLabel("仅处理 jpg/jpeg/png；物理尺寸从文件名解析（如“200乘以80”或“200x80”= 200cm×80cm），请勿改名。")
         hint.setObjectName("Subtitle")
         hint.setWordWrap(True)
         path_layout.addWidget(hint)
@@ -144,7 +146,7 @@ class BatchPage(QWidget):
             window.banner.show_message(
                 "error",
                 "输入目录中没有可处理的图片：仅支持 jpg/jpeg/png，"
-                "且文件名必须含物理尺寸（如“200乘以80”）。"
+                "且文件名必须含物理尺寸（如“200乘以80”或“200x80”）。"
                 + (f" 有 {skipped} 张图片因文件名不含尺寸被跳过。" if skipped else ""),
             )
             return False

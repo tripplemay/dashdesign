@@ -25,7 +25,11 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 Image.MAX_IMAGE_PIXELS = None
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
-SIZE_RE = re.compile(r"(\d+)\s*乘(?:以)?\s*(\d+)")
+# Accept 乘/乘以/x/×/* as the separator (e.g. 120乘以80, 200x80, 80×180); the
+# digits may be full-width (int() parses those too). Deliberately excludes -/_
+# so dated names like 2025-01-01 are not misread as dimensions. Keep in sync
+# with ui/pages/batch_page.py:_SIZE_RE (an independent copy).
+SIZE_RE = re.compile(r"(\d+)\s*(?:乘以|乘|[xX*×])\s*(\d+)")
 
 
 @dataclass(frozen=True)
