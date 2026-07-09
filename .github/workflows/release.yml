@@ -193,6 +193,21 @@ jobs:
           WINDOWS_SIGN_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGN_CERT_PASSWORD }}
         run: ./packaging/windows/sign.ps1 -Path "${{ steps.exe.outputs.path }}"
 
+      - name: Build portable zip
+        id: portable
+        shell: pwsh
+        run: |
+          $version = "${env:VERSION}".TrimStart("v")
+          $zip = "dist\DashDesign-$version-windows-portable.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          # Zip the DashDesign folder as the archive root so extraction yields a
+          # single named folder (extract-and-run, no installer). The signed
+          # DashDesign.exe from the previous step is included as-is.
+          Compress-Archive -Path "${{ steps.exe.outputs.dir }}" -DestinationPath $zip
+          $item = Get-Item $zip
+          if (-not $item) { throw "Portable zip was not produced at $zip" }
+          "path=$($item.FullName)" >> $env:GITHUB_OUTPUT
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
@@ -222,6 +237,12 @@ jobs:
         with:
           name: windows
           path: ${{ steps.installer.outputs.path }}
+
+      - name: Upload Windows portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: ${{ steps.portable.outputs.path }}
 
   publish:
     name: Publish Release
