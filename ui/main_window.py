@@ -492,6 +492,11 @@ class DashDesignQtApp(QMainWindow):
             process_env.insert(key, value)
         # 让脚本发出结构化进度事件；命令行直跑脚本时不设此变量，输出保持原样。
         process_env.insert("DASHDESIGN_PROGRESS", "1")
+        # 强制子进程 UTF-8 I/O：中文 Windows 默认 cp936，会让进度中文变乱码。
+        # 与 app_runtime 里对 stdout/stderr 的显式 reconfigure 互为兜底，并覆盖
+        # 脚本可能再拉起的嵌套 Python 子进程。
+        process_env.insert("PYTHONUTF8", "1")
+        process_env.insert("PYTHONIOENCODING", "utf-8")
 
         self.process = QProcess(self)
         self.process.setWorkingDirectory(str(runtime_root()))

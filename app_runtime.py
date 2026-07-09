@@ -244,10 +244,13 @@ def run_script_worker(script_name: str, args: list[str]) -> int:
     sys.path.insert(0, str(script_path.parent))
     # worker 的 stdout 连的是管道（非 TTY），CPython 默认全块缓冲，会把脚本
     # 的进度输出憋到缓冲满或退出才冲出。切成行缓冲让每行 print 立即到达 GUI。
-    try:
-        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
-    except (AttributeError, ValueError, OSError):
-        pass
+    # 同时强制 UTF-8：中文 Windows 下管道默认按 cp936/GBK 编码，而 GUI 按 UTF-8
+    # 解码（bytes.decode() 恒 UTF-8），不统一就会把中文进度名解成乱码。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)  # type: ignore[attr-defined]
+        except (AttributeError, ValueError, OSError):
+            pass
     try:
         runpy.run_path(str(script_path), run_name="__main__")
     except SystemExit as exc:
