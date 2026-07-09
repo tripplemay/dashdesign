@@ -15,6 +15,7 @@ from typing import Any
 import progress
 
 from image_api_client import execute_image_generation
+from prompt_translate import translate_visual_prompt
 from prompt_template_compiler import (
     DEFAULT_TEMPLATE_LIBRARY,
     compile_prompt_template_profile,
@@ -218,6 +219,7 @@ def build_package(
     realesrgan_binary: "Path | None" = None,
     realesrgan_model_dir: "Path | None" = None,
     realesrgan_model: str = "realesrgan-x4plus",
+    text_model: str = "",
 ) -> Path:
     if width_cm <= 0 or height_cm <= 0:
         raise ValueError("Width and height must be positive centimeters")
@@ -265,6 +267,9 @@ def build_package(
         raise ValueError(f"整图海报提示词包含当前 C 端基线禁用词：{terms}")
 
     progress.stage(2)
+    # 画面提示词此前已用中文原文过了禁用词检查；这里中译英喂图像模型（失败降级用原文）。
+    # 海报文案（poster_copy）是要印在图上的中文，绝不翻译。
+    user_prompt = translate_visual_prompt(user_prompt, text_model)
     image_size = resolve_image_size(width_cm, height_cm, requested_image_size)
     prompt = build_full_poster_prompt(
         baseline,
@@ -447,6 +452,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--realesrgan-binary", type=Path, default=Path("tools/realesrgan-ncnn-vulkan"))
     parser.add_argument("--realesrgan-model-dir", type=Path, default=Path("tools/models"))
     parser.add_argument("--realesrgan-model", default="realesrgan-x4plus")
+    parser.add_argument(
+        "--text-model",
+        default="",
+        help="Text model id used to translate the Chinese visual prompt to English before image generation.",
+    )
     parser.add_argument("--allow-blocked-terms", action="store_true", help=argparse.SUPPRESS)
     return parser
 
@@ -480,6 +490,7 @@ def main() -> int:
             realesrgan_binary=args.realesrgan_binary,
             realesrgan_model_dir=args.realesrgan_model_dir,
             realesrgan_model=args.realesrgan_model,
+            text_model=args.text_model,
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)

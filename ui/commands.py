@@ -49,6 +49,7 @@ class TextImageForm:
     postprocess: bool
     base_url: str
     api_key: str
+    text_model: str = ""
 
 
 def build_text_image_command(form: TextImageForm):
@@ -103,6 +104,9 @@ def build_text_image_command(form: TextImageForm):
         "--quality",
         form.quality,
     ]
+    # 文本模型：脚本据此把中文画面提示词中译英再喂图像模型（两种模式都译）。
+    if form.text_model.strip():
+        command += ["--text-model", form.text_model.strip()]
     if mode == "full_poster":
         command += [
             "--template-library",

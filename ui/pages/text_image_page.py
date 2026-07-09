@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -26,8 +28,9 @@ from PySide6.QtWidgets import (
 from app_runtime import PROJECT_ROOT
 from ui import api_config, baseline_service
 from ui.commands import TextImageForm
+from ui.scene_prompts import ScenePrompt, load_scene_prompts
 from ui.utils import scrollable_page_layout
-from ui.widgets import PathField
+from ui.widgets import FlowLayout, PathField
 
 _PROMPT_PLACEHOLDER_DEFAULT = "只描述背景、场景、主体、氛围和构图要求，不粘贴完整海报文案。"
 _PROMPT_PLACEHOLDER_FULL = "可选：补充完整海报的主体、场景或特别要求。留空时将使用模板、基线和文案生成。"
@@ -76,6 +79,22 @@ class TextImagePage(QWidget):
         self.t2i_prompt.setPlaceholderText(_PROMPT_PLACEHOLDER_DEFAULT)
         self.t2i_prompt.setMinimumHeight(110)
         self.t2i_prompt.textChanged.connect(lambda: _mark_invalid(self.t2i_prompt, False))
+        # 快捷模板：内置儿童教育行业画面提示词，点击追加到文本框（用户可再手改）。
+        # 显示中文；生成脚本会在调用图像模型前把画面提示词中译英。
+        self._scene_prompts = load_scene_prompts()
+        if self._scene_prompts:
+            chips_hint = QLabel("快捷模板（点击追加，内容可手动修改）")
+            chips_hint.setObjectName("Subtitle")
+            prompt_layout.addWidget(chips_hint)
+            chips_container = QWidget()
+            chips_flow = FlowLayout(chips_container, margin=0, spacing=6)
+            for scene in self._scene_prompts:
+                chip = QPushButton(scene.label)
+                chip.setToolTip(scene.prompt)
+                chip.setCursor(Qt.CursorShape.PointingHandCursor)
+                chip.clicked.connect(lambda _checked=False, s=scene: self._append_scene_prompt(s))
+                chips_flow.addWidget(chip)
+            prompt_layout.addWidget(chips_container)
         prompt_layout.addWidget(self.t2i_prompt)
         layout.addWidget(self.prompt_box)
 
@@ -238,6 +257,14 @@ class TextImagePage(QWidget):
         info = baseline_service.active_project_id()
         self.baseline_label.setText(f"当前项目基线：{info or '（未选择）'} · {baseline_service.active_baseline_path()}")
 
+    def _append_scene_prompt(self, scene: ScenePrompt) -> None:
+        """点击快捷模板：在已有内容后换行追加该场景的中文画面提示词。"""
+        current = self.t2i_prompt.toPlainText().rstrip()
+        self.t2i_prompt.setPlainText(f"{current}\n{scene.prompt}" if current else scene.prompt)
+        self.t2i_prompt.moveCursor(QTextCursor.MoveOperation.End)
+        self.t2i_prompt.setFocus()
+        _mark_invalid(self.t2i_prompt, False)
+
     def confirm_run(self, window) -> bool:  # type: ignore[no-untyped-def]
         if not api_config.has_api_key():
             window.banner.show_message(
@@ -295,6 +322,7 @@ class TextImagePage(QWidget):
             postprocess=self.t2i_postprocess.isChecked(),
             base_url=api_config.load_base_url(),
             api_key=api_config.load_api_key(),
+            text_model=api_config.load_baseline_model(),
         )
 
     def input_preview_path(self) -> "Path | None":

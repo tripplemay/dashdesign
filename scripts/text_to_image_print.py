@@ -20,6 +20,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 import progress
 
 from image_api_client import execute_image_generation
+from prompt_translate import translate_visual_prompt
 from prepare_print_assets import (
     SR_MAX_INPUT_EDGE,
     SR_MAX_INPUT_PIXELS,
@@ -1316,6 +1317,7 @@ def build_package(
     realesrgan_binary: "Path | None" = None,
     realesrgan_model_dir: "Path | None" = None,
     realesrgan_model: str = "realesrgan-x4plus",
+    text_model: str = "",
 ) -> Path:
     if mode not in MODE_CHOICES:
         raise ValueError(f"Mode must be one of: {', '.join(MODE_CHOICES)}")
@@ -1363,6 +1365,9 @@ def build_package(
         raise ValueError(f"文生图提示词包含当前 C 端基线禁用词：{terms}")
 
     _advance("生成提示词")
+    # 画面提示词此前已用中文原文过了禁用词检查；这里再中译英喂给图像模型。
+    # 翻译失败会降级返回原中文（gpt-image-2 也能理解），绝不因翻译中断出图。
+    user_prompt = translate_visual_prompt(user_prompt, text_model)
     image_size = resolve_image_size(width_cm, height_cm, requested_image_size)
     context_source = prompt_context_source(baseline)
     context_hash = profile_hash(context_source)
@@ -1602,6 +1607,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--realesrgan-model-dir", type=Path, default=Path("tools/models"))
     parser.add_argument("--realesrgan-model", default="realesrgan-x4plus")
     parser.add_argument(
+        "--text-model",
+        default="",
+        help="Text model id used to translate the Chinese visual prompt to English before image generation.",
+    )
+    parser.add_argument(
         "--allow-blocked-terms",
         action="store_true",
         help=argparse.SUPPRESS,
@@ -1636,6 +1646,7 @@ def main() -> int:
             realesrgan_binary=args.realesrgan_binary,
             realesrgan_model_dir=args.realesrgan_model_dir,
             realesrgan_model=args.realesrgan_model,
+            text_model=args.text_model,
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)

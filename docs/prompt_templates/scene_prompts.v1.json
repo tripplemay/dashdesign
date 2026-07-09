@@ -1,0 +1,90 @@
+{
+  "version": "2026.07.09.1",
+  "description": "DashDesign built-in Chinese visual-prompt presets for to-C children AI-education poster generation. Shown to users in Chinese; translated to English before being sent to the image model.",
+  "scenes": [
+    {
+      "id": "future_digital_classroom",
+      "label": "未来数字课堂",
+      "category": "场景",
+      "prompt": "明亮的未来感教室，孩子们围坐用发光平板和全息屏幕创作数字画作，暖色自然光，柔和科技蓝点缀，宽幅电影感构图，画面上方留出干净的标题区。"
+    },
+    {
+      "id": "neon_ai_tech",
+      "label": "科技霓虹AI",
+      "category": "风格",
+      "prompt": "深色科技背景配霓虹光效与流动的AI数据线条，友好的卡通机器人吉祥物，发光电路纹理，未来感强，画面中心留白突出主体。"
+    },
+    {
+      "id": "art_creation_workshop",
+      "label": "艺术创作工坊",
+      "category": "场景",
+      "prompt": "温暖明亮的儿童艺术工坊，孩子专注画画和手工创作，木质桌面摆满画笔颜料，柔和日光透过窗户，治愈温馨的氛围。"
+    },
+    {
+      "id": "outdoor_nature_explore",
+      "label": "户外自然探索",
+      "category": "场景",
+      "prompt": "阳光明媚的户外草地，孩子们好奇地观察自然、用放大镜和平板记录发现，蓝天白云，清新绿意，充满探索乐趣。"
+    },
+    {
+      "id": "robot_stem_coding",
+      "label": "机器人与编程",
+      "category": "主体",
+      "prompt": "孩子们动手搭建和编程小机器人，STEM实验桌上摆着电子积木和显示屏，明亮现代的科创教室，鼓励动手与逻辑思维。"
+    },
+    {
+      "id": "space_scifi_imagination",
+      "label": "太空科幻想象",
+      "category": "场景",
+      "prompt": "梦幻的太空场景，孩子化身小宇航员在星空和行星间遨游，绚丽星云与柔光，充满想象力与科幻感，构图开阔。"
+    },
+    {
+      "id": "storybook_whimsy",
+      "label": "绘本童趣",
+      "category": "风格",
+      "prompt": "温柔的绘本插画风格，圆润可爱的造型与柔和马卡龙色系，快乐的孩子与友好的小动物，充满童真与想象，手绘质感。"
+    },
+    {
+      "id": "chinese_style_creative",
+      "label": "国风创意",
+      "category": "风格",
+      "prompt": "现代国风插画，水墨意境与国潮色彩结合，孩子身着传统与现代融合的服饰进行创作，雅致而富有文化气息，注重留白。"
+    },
+    {
+      "id": "science_lab_discovery",
+      "label": "科学实验室",
+      "category": "场景",
+      "prompt": "明亮的儿童科学实验室，孩子戴护目镜做安全有趣的小实验，试管与彩色液体、发光装置，激发好奇心，专业又活泼。"
+    },
+    {
+      "id": "parent_child_cocreate",
+      "label": "亲子共创",
+      "category": "主体",
+      "prompt": "温馨的亲子共创画面，家长与孩子一起在平板上创作数字作品，家中明亮客厅，温暖陪伴的氛围，情感真挚。"
+    },
+    {
+      "id": "ai_artwork_showcase",
+      "label": "AI绘画展示",
+      "category": "主体",
+      "prompt": "孩子自豪地展示自己用AI创作的绚丽数字画作，作品挂满展示墙，明亮的画廊灯光，成就感与创造力满满。"
+    },
+    {
+      "id": "dreamy_gradient_bg",
+      "label": "梦幻渐变背景",
+      "category": "风格",
+      "prompt": "梦幻柔和的渐变背景，粉蓝紫色流动光晕与漂浮的星点光斑，简洁通透，中心大面积留白，适合作为海报主视觉的干净背景。"
+    },
+    {
+      "id": "music_rhythm_creative",
+      "label": "音乐律动创作",
+      "category": "场景",
+      "prompt": "充满活力的音乐创作场景，孩子们敲击电子乐器、跟随律动，跳动的音符与彩色光效，欢快明亮，节奏感强。"
+    },
+    {
+      "id": "confident_future_kids",
+      "label": "自信未来少年",
+      "category": "主体",
+      "prompt": "自信阳光的孩子面向未来，眼神明亮，背景是柔和的科技光晕与向上流动的光带，积极向上，展现学习成果与自信。"
+    }
+  ]
+}

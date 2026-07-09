@@ -21,6 +21,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
 BASELINE_RELATIVE_PATH = Path("docs") / "baseline" / "baseline.v1.draft.json"
 BASELINE_SCHEMA_RELATIVE_PATH = Path("docs") / "baseline" / "baseline.schema.json"
 PROMPT_TEMPLATE_RELATIVE_PATH = Path("docs") / "prompt_templates" / "full_poster_templates.v1.json"
+SCENE_PROMPTS_RELATIVE_PATH = Path("docs") / "prompt_templates" / "scene_prompts.v1.json"
 
 
 def read_app_version() -> str:
@@ -116,6 +117,13 @@ def prompt_template_library_path() -> Path:
     if bundled.exists():
         return bundled
     return PROJECT_ROOT / PROMPT_TEMPLATE_RELATIVE_PATH
+
+
+def scene_prompts_library_path() -> Path:
+    bundled = APP_ROOT / SCENE_PROMPTS_RELATIVE_PATH
+    if bundled.exists():
+        return bundled
+    return PROJECT_ROOT / SCENE_PROMPTS_RELATIVE_PATH
 
 
 def evidenced_text(value: object) -> str:
