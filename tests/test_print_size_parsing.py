@@ -17,7 +17,11 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from prepare_print_assets import parse_size_from_name  # noqa: E402
+from prepare_print_assets import (  # noqa: E402
+    discover_sources,
+    parse_size_from_name,
+    size_from_print_spec,
+)
 
 # Mirror of ui/pages/batch_page._SIZE_RE (that module imports PySide6, which is
 # not installed in the headless test env, so re-declare the pattern here and
@@ -67,3 +71,60 @@ class TestGuiAndWorkerRegexAgree:
             assert (gui is not None) == (worker is not None)
             if gui is not None:
                 assert (int(gui.group(1)), int(gui.group(2))) == worker
+
+
+def _write_spec(directory: Path, width: object = 120.0, height: object = 80.0) -> None:
+    import json
+
+    (directory / "print_spec.json").write_text(
+        json.dumps({"width_cm": width, "height_cm": height}), encoding="utf-8"
+    )
+
+
+class TestSizeFromPrintSpec:
+    def test_reads_and_rounds(self, tmp_path: Path) -> None:
+        _write_spec(tmp_path, 120.4, 80.0)
+        assert size_from_print_spec(tmp_path) == (120, 80)
+
+    def test_missing_file(self, tmp_path: Path) -> None:
+        assert size_from_print_spec(tmp_path) is None
+
+    def test_malformed_json(self, tmp_path: Path) -> None:
+        (tmp_path / "print_spec.json").write_text("not json", encoding="utf-8")
+        assert size_from_print_spec(tmp_path) is None
+
+    def test_missing_keys(self, tmp_path: Path) -> None:
+        (tmp_path / "print_spec.json").write_text('{"dpi": 200}', encoding="utf-8")
+        assert size_from_print_spec(tmp_path) is None
+
+    def test_non_positive_rejected(self, tmp_path: Path) -> None:
+        _write_spec(tmp_path, 0, 80)
+        assert size_from_print_spec(tmp_path) is None
+
+
+class TestDiscoverSourcesSpecFallback:
+    """master.png（文件名无尺寸）应经同目录 print_spec.json 回退被发现。"""
+
+    @staticmethod
+    def _write_png(path: Path) -> None:
+        from PIL import Image
+
+        Image.new("RGB", (10, 10)).save(path)
+
+    def test_master_png_discovered_via_spec(self, tmp_path: Path) -> None:
+        self._write_png(tmp_path / "master.png")
+        _write_spec(tmp_path, 120, 80)
+        specs = discover_sources(tmp_path)
+        assert [(s.path.name, s.width_cm, s.height_cm) for s in specs] == [
+            ("master.png", 120, 80)
+        ]
+
+    def test_master_png_skipped_without_spec(self, tmp_path: Path) -> None:
+        self._write_png(tmp_path / "master.png")
+        assert discover_sources(tmp_path) == []
+
+    def test_filename_size_wins_over_spec(self, tmp_path: Path) -> None:
+        self._write_png(tmp_path / "200x80.png")
+        _write_spec(tmp_path, 120, 80)
+        specs = discover_sources(tmp_path)
+        assert [(s.width_cm, s.height_cm) for s in specs] == [(200, 80)]

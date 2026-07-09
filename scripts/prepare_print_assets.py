@@ -12,6 +12,7 @@ import argparse
 import csv
 import fnmatch
 import gc
+import json
 import re
 import subprocess
 from dataclasses import dataclass
@@ -46,6 +47,26 @@ def parse_size_from_name(path: Path) -> tuple[int, int] | None:
     if not match:
         return None
     return int(match.group(1)), int(match.group(2))
+
+
+def size_from_print_spec(directory: Path) -> tuple[int, int] | None:
+    """Physical size from a ``print_spec.json`` sidecar in ``directory``.
+
+    The text-to-image / full-poster packages name their master ``master.png``
+    (no size in the filename) and record the physical size in this sidecar —
+    same convention gpt_image_rebuild already resolves. Returns None when the
+    sidecar is missing or unusable.
+    """
+    spec_path = directory / "print_spec.json"
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        width_cm = float(spec["width_cm"])
+        height_cm = float(spec["height_cm"])
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+    if width_cm <= 0 or height_cm <= 0:
+        return None
+    return int(round(width_cm)), int(round(height_cm))
 
 
 def target_pixels(width_cm: int, height_cm: int, dpi: int) -> tuple[int, int]:
@@ -216,13 +237,16 @@ def matches_requested_file(path: Path, requested: list[str] | None) -> bool:
 
 def discover_sources(input_dir: Path, requested: list[str] | None = None) -> list[SourceSpec]:
     specs: list[SourceSpec] = []
+    # 目录级回退：文生图/整幅海报产包的 master.png 文件名不带尺寸，
+    # 尺寸在同目录 print_spec.json 里（对该目录的所有候选图都适用）。
+    spec_size = size_from_print_spec(input_dir)
     for path in sorted(input_dir.iterdir()):
         if not path.is_file() or path.suffix.lower() not in IMAGE_EXTENSIONS:
             continue
         if not matches_requested_file(path, requested):
             continue
 
-        size = parse_size_from_name(path)
+        size = parse_size_from_name(path) or spec_size
         if not size:
             continue
 
