@@ -11,7 +11,8 @@ a live gateway; production builds it from the server's own gateway credentials.
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from baseline.extract import extract_candidates
 from baseline.ingest.parse import ParsedDocument, ParsedSection, parse_document
@@ -37,7 +38,9 @@ def parsed_from_storage_url(storage_url: str, filename: str) -> ParsedDocument:
         )
     from pathlib import Path
 
-    path = Path(unquote(parsed_url.path))
+    # url2pathname is platform-correct (handles the Windows /C:/... form); plain
+    # Path(urlparse(...).path) would yield an invalid \C:\... path on Windows.
+    path = Path(url2pathname(parsed_url.path))
     return parse_document(path)
 
 

@@ -34,9 +34,11 @@ def test_local_store_writes_file_and_returns_uri(tmp_path):
     store = LocalDocumentStore(tmp_path / "docs")
     url = store.put("proj", "doc1", "note.txt", b"hello")
     assert url.startswith("file://")
-    from urllib.parse import unquote, urlparse
+    from urllib.parse import urlparse
+    from urllib.request import url2pathname
 
-    path = Path(unquote(urlparse(url).path))
+    # Platform-correct URI -> path (Windows file:///C:/... needs url2pathname).
+    path = Path(url2pathname(urlparse(url).path))
     assert path.read_bytes() == b"hello"
 
 
