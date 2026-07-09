@@ -49,6 +49,18 @@ jobs:
           echo "${VERSION#v}" > VERSION
           echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update-manifest.json" > UPDATE_MANIFEST_URL
 
+      - name: Inject baked client token
+        shell: bash
+        env:
+          DASHDESIGN_CLIENT_TOKEN: ${{ secrets.DASHDESIGN_CLIENT_TOKEN }}
+        run: |
+          if [ -z "$DASHDESIGN_CLIENT_TOKEN" ]; then
+            echo "::error::DASHDESIGN_CLIENT_TOKEN secret is not set — the built app would not be zero-config. Add it in Settings → Secrets and variables → Actions." >&2
+            exit 1
+          fi
+          printf 'CLIENT_TOKEN = "%s"\n' "$DASHDESIGN_CLIENT_TOKEN" > ui/_secrets.py
+          echo "Wrote ui/_secrets.py (baked client token, ${#DASHDESIGN_CLIENT_TOKEN} chars)."
+
       - name: Bootstrap runtime assets
         run: ./scripts/bootstrap_runtime_assets.sh
 
@@ -140,6 +152,18 @@ jobs:
         run: |
           echo "${VERSION#v}" > VERSION
           echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update-manifest.json" > UPDATE_MANIFEST_URL
+
+      - name: Inject baked client token
+        shell: bash
+        env:
+          DASHDESIGN_CLIENT_TOKEN: ${{ secrets.DASHDESIGN_CLIENT_TOKEN }}
+        run: |
+          if [ -z "$DASHDESIGN_CLIENT_TOKEN" ]; then
+            echo "::error::DASHDESIGN_CLIENT_TOKEN secret is not set — the built app would not be zero-config. Add it in Settings → Secrets and variables → Actions." >&2
+            exit 1
+          fi
+          printf 'CLIENT_TOKEN = "%s"\n' "$DASHDESIGN_CLIENT_TOKEN" > ui/_secrets.py
+          echo "Wrote ui/_secrets.py (baked client token, ${#DASHDESIGN_CLIENT_TOKEN} chars)."
 
       - name: Bootstrap runtime assets
         shell: bash
