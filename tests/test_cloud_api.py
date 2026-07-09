@@ -19,6 +19,7 @@ from cloud.server.config import Settings  # noqa: E402
 from tests.baseline_fixtures import base_baseline, dirty  # noqa: E402
 
 _ADMIN = "admin-token"
+_ADMIN_PW = "admin-pass-123"
 _DOC_TEXT = "本课程面向青少年的专业创作课程，注重动手实践与作品产出。"
 _QUOTE = "面向青少年的专业创作课程"
 
@@ -43,7 +44,8 @@ def app_ctx(tmp_path):
     )
     settings = Settings(
         db_url="sqlite://", doc_store="local", doc_root=tmp_path / "docs",
-        oss_bucket="", oss_endpoint="", oss_prefix="p/", admin_token=_ADMIN, seed_demo=False,
+        oss_bucket="", oss_endpoint="", oss_prefix="p/", admin_token=_ADMIN,
+        admin_password=_ADMIN_PW, seed_demo=False,
     )
     app = create_app(settings=settings, engine=engine, chat_factory=lambda model: _fake_chat)
     return app
@@ -58,9 +60,9 @@ def _h(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def _mint(app, user_id, token, is_admin=False, project=None, role=None):
+def _mint(app, user_id, token, is_admin=False, project=None, role=None, global_role=None):
     with app.state.session_factory() as s:
-        auth.ensure_user_with_token(s, user_id, user_id, token, is_admin)
+        auth.ensure_user_with_token(s, user_id, user_id, token, is_admin, global_role=global_role)
         if project and role:
             auth.add_member(s, project, user_id, role)
         s.commit()
@@ -202,6 +204,47 @@ class TestRoles:
         assert client.get("/projects/proj_a", headers=_h("out-token")).status_code == 403
         # And it does not appear in their project list.
         assert client.get("/projects", headers=_h("out-token")).json() == []
+
+
+class TestAppConfigAndAdmin:
+    def test_default_config_empty(self, client):
+        cfg = client.get("/app-config", headers=_h(_ADMIN)).json()
+        assert cfg["image_api_key"] == ""
+        assert cfg["baseline_model"] == "gpt-4o"
+
+    def test_config_requires_auth(self, client):
+        assert client.get("/app-config").status_code == 401
+
+    def test_admin_password_gates_put(self, client):
+        body = {"image_api_base_url": "https://gw/v1", "image_api_key": "sk-xyz", "baseline_model": "gpt-5.5"}
+        # Wrong password -> 403.
+        assert client.put("/app-config", json=body, headers={"X-Admin-Password": "nope"}).status_code == 403
+        # Correct password -> saved.
+        ok = client.put("/app-config", json=body, headers={"X-Admin-Password": _ADMIN_PW})
+        assert ok.status_code == 200 and ok.json()["image_api_key"] == "sk-xyz"
+        # Now every client (shared token) reads it, no local setup.
+        got = client.get("/app-config", headers=_h(_ADMIN)).json()
+        assert got["image_api_base_url"] == "https://gw/v1"
+        assert got["image_api_key"] == "sk-xyz"
+        assert got["baseline_model"] == "gpt-5.5"
+
+    def test_admin_verify(self, client):
+        assert client.post("/admin/verify", headers={"X-Admin-Password": _ADMIN_PW}).json() == {"ok": True}
+        assert client.post("/admin/verify", headers={"X-Admin-Password": "bad"}).status_code == 403
+
+
+class TestGlobalRole:
+    def test_global_editor_sees_and_writes_all_projects(self, client, app_ctx):
+        _create_project(client, "proj_a")
+        _create_project(client, "proj_b")
+        _mint(app_ctx, "shared", "shared-token", global_role="editor")
+        # A shared global-editor identity sees every project without membership...
+        seen = {p["baseline_id"] for p in client.get("/projects", headers=_h("shared-token")).json()}
+        assert {"proj_a", "proj_b"} <= seen
+        # ...and can write drafts to any of them.
+        draft = base_baseline("proj_a", "2026.07.06.2")
+        draft["parent_version"] = "2026.07.06.1"
+        assert client.post("/projects/proj_a/drafts", json=draft, headers=_h("shared-token")).status_code == 201
 
 
 class TestDocumentsAndMerge:

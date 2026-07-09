@@ -61,3 +61,18 @@ class MergeJobIn(BaseModel):
 class ErrorOut(BaseModel):
     code: str
     messages: List[str] = Field(default_factory=list)
+
+
+class AppConfigModel(BaseModel):
+    """Shared client bootstrap config pushed by the admin, fetched by all clients."""
+
+    # Optional override for where baselines live; empty = the bootstrap endpoint
+    # the client is baked with (this same server, for the standard deployment).
+    baseline_endpoint: str = ""
+    image_api_base_url: str = ""
+    image_api_key: str = ""
+    baseline_model: str = "gpt-4o"
+
+
+class AdminVerifyOut(BaseModel):
+    ok: bool

@@ -1,9 +1,9 @@
-"""Persisted, app-wide API credentials (base URL + key).
+"""Effective API credentials for image workflows.
 
-Single source of truth backed by QSettings (per-user OS store — not the repo,
-survives app updates). Shared by every workflow that calls the image API, so
-the operator configures it once. The key is stored in plain text in the user
-settings store; it is never written into a git-tracked file.
+For the internal cloud tool these come from the shared app-config the admin
+pushes to the cloud (fetched by every client — ordinary users configure nothing).
+A per-machine QSettings override and the OPENAI_* env vars remain as fallbacks
+(dev / offline / self-hosted-without-cloud), applied in that order.
 """
 
 from __future__ import annotations
@@ -12,33 +12,42 @@ import os
 
 from PySide6.QtCore import QSettings
 
+from ui import cloud_bootstrap
+
 _BASE_URL_KEY = "api/base_url"
 _API_KEY_KEY = "api/key"
 _BASELINE_MODEL_KEY = "api/baseline_model"
-# Phase B: baseline cloud endpoint + bearer token. When both are set the desktop
-# app talks to the cloud repository (shared, multi-user); otherwise it uses the
-# local filesystem repository. Stored per-user in QSettings like the image key.
-_CLOUD_URL_KEY = "baseline/cloud_url"
-_CLOUD_TOKEN_KEY = "baseline/cloud_token"
 
-# 文档合并抽取用的文本模型。默认取一个通用 OpenAI 文本模型；不同网关支持的
-# 模型不同（有的只支持 OpenAI 系），用户可在“设置”里改成自己网关支持的名字。
+# 文档合并抽取用的文本模型默认值。不同网关支持的模型不同（有的只支持 OpenAI 系）。
 DEFAULT_BASELINE_MODEL = "gpt-4o"
 
 
+def _cloud() -> dict:
+    return cloud_bootstrap.cached_app_config()
+
+
+def _local(key: str) -> str:
+    return str(QSettings().value(key, "") or "").strip()
+
+
 def load_base_url() -> str:
-    return str(QSettings().value(_BASE_URL_KEY, "") or "").strip()
+    return str(_cloud().get("image_api_base_url", "") or "").strip() or _local(_BASE_URL_KEY)
 
 
 def load_api_key() -> str:
-    return str(QSettings().value(_API_KEY_KEY, "") or "").strip()
+    return str(_cloud().get("image_api_key", "") or "").strip() or _local(_API_KEY_KEY)
 
 
 def load_baseline_model() -> str:
-    return str(QSettings().value(_BASELINE_MODEL_KEY, "") or "").strip() or DEFAULT_BASELINE_MODEL
+    return (
+        str(_cloud().get("baseline_model", "") or "").strip()
+        or _local(_BASELINE_MODEL_KEY)
+        or DEFAULT_BASELINE_MODEL
+    )
 
 
 def save(base_url: str, api_key: str, baseline_model: str = "") -> None:
+    """Persist a per-machine override (dev / self-hosted). Cloud config wins over this."""
     settings = QSettings()
     settings.setValue(_BASE_URL_KEY, base_url.strip())
     settings.setValue(_API_KEY_KEY, api_key.strip())
@@ -46,24 +55,5 @@ def save(base_url: str, api_key: str, baseline_model: str = "") -> None:
 
 
 def has_api_key() -> bool:
-    """A key is available if it is persisted or present in the inherited env."""
+    """A key is available from the cloud config, a local override, or the env."""
     return bool(load_api_key() or os.environ.get("OPENAI_API_KEY", "").strip())
-
-
-def load_cloud_url() -> str:
-    return str(QSettings().value(_CLOUD_URL_KEY, "") or "").strip()
-
-
-def load_cloud_token() -> str:
-    return str(QSettings().value(_CLOUD_TOKEN_KEY, "") or "").strip()
-
-
-def save_cloud(cloud_url: str, cloud_token: str) -> None:
-    settings = QSettings()
-    settings.setValue(_CLOUD_URL_KEY, cloud_url.strip())
-    settings.setValue(_CLOUD_TOKEN_KEY, cloud_token.strip())
-
-
-def has_cloud() -> bool:
-    """The cloud repository is used only when both endpoint and token are set."""
-    return bool(load_cloud_url() and load_cloud_token())

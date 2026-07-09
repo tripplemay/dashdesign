@@ -26,6 +26,7 @@ class Settings:
     oss_endpoint: str
     oss_prefix: str
     admin_token: str  # optional bootstrap token -> a global-admin principal
+    admin_password: str  # gates editing the shared app-config (settings UI)
     seed_demo: bool
 
     @property
@@ -42,5 +43,6 @@ def load_settings() -> Settings:
         oss_endpoint=_env("BASELINE_OSS_ENDPOINT"),
         oss_prefix=_env("BASELINE_OSS_PREFIX", "baseline-docs/"),
         admin_token=_env("BASELINE_ADMIN_TOKEN"),
+        admin_password=_env("BASELINE_ADMIN_PASSWORD"),
         seed_demo=_env("BASELINE_SEED_DEMO", "").lower() in ("1", "true", "yes"),
     )

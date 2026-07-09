@@ -47,7 +47,7 @@ from app_runtime import (
     runtime_root,
     version_tuple,
 )
-from ui import commands, theme
+from ui import cloud_bootstrap, commands, theme
 from ui.pages import BaselinePage, BatchPage, GptPage, QrPage, TextImagePage
 from ui.progress import ProgressModel, parse_progress_line
 from ui.updater import UpdateSignals, fetch_update_manifest
@@ -58,6 +58,9 @@ from ui.widgets import ImagePreview, InfoBanner, ProgressPanel, SettingsDialog
 class DashDesignQtApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
+        # Zero-config bootstrap: refresh the shared cloud config (image API creds,
+        # baseline endpoint) in the background so ordinary users set nothing.
+        cloud_bootstrap.bootstrap_async()
         self.setWindowTitle("DashDesign 印刷图片工作流")
         self.resize(1180, 780)
         self.setMinimumSize(980, 680)

@@ -29,9 +29,12 @@ def _session(db_url: str):
 def _cmd_create_token(args: argparse.Namespace) -> int:
     token = args.token or auth.new_token()
     with _session(args.db) as session:
-        auth.ensure_user_with_token(session, args.user_id, args.name or args.user_id, token, args.admin)
+        auth.ensure_user_with_token(
+            session, args.user_id, args.name or args.user_id, token, args.admin,
+            global_role=args.global_role or None,
+        )
         session.commit()
-    print(f"user={args.user_id} admin={args.admin}")
+    print(f"user={args.user_id} admin={args.admin} global_role={args.global_role or '-'}")
     print(f"token={token}")
     return 0
 
@@ -65,6 +68,10 @@ def build_parser() -> argparse.ArgumentParser:
     ct.add_argument("user_id")
     ct.add_argument("--name", default="")
     ct.add_argument("--admin", action="store_true", help="Global admin (bypasses membership).")
+    ct.add_argument(
+        "--global-role", choices=("reviewer", "editor", "admin"), default="",
+        help="Workspace-wide role over all projects (for the shared client identity).",
+    )
     ct.add_argument("--token", default="", help="Use a specific token instead of a random one.")
     ct.set_defaults(func=_cmd_create_token)
 

@@ -8,6 +8,7 @@ the chat factory and (in tests) an in-memory SQLite engine can be injected.
 
 from __future__ import annotations
 
+import hmac
 from typing import Callable, Iterator, List, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, Request, Response, UploadFile
@@ -274,6 +275,35 @@ def create_app(
         job = store.get_merge_job(job_id)
         require_role(job.baseline_id, principal, store.s, "reviewer")
         return {"status": job.status, "report": job.report, "error": job.error}
+
+    # --- shared app config (client bootstrap) ---------------------------
+    def _check_admin_password(provided: str) -> None:
+        expected = app.state.settings.admin_password
+        if not expected or not hmac.compare_digest(provided or "", expected):
+            raise _HTTPError(403, "forbidden", ["管理密码错误，或服务端未配置管理密码"])
+
+    @app.get("/app-config", response_model=schemas.AppConfigModel)
+    def get_app_config(
+        store: SqlBaselineStore = Depends(get_store),
+        principal: auth.Principal = Depends(get_principal),
+    ):
+        # Any authenticated client (incl. the shared client token) may read it.
+        return store.get_app_config()
+
+    @app.put("/app-config", response_model=schemas.AppConfigModel)
+    def put_app_config(
+        body: schemas.AppConfigModel,
+        store: SqlBaselineStore = Depends(get_store),
+        x_admin_password: str = Header(default=""),
+    ):
+        # Gated by the admin password only — the admin needs no bearer token.
+        _check_admin_password(x_admin_password)
+        return store.set_app_config(body.model_dump(), updated_by="admin")
+
+    @app.post("/admin/verify", response_model=schemas.AdminVerifyOut)
+    def admin_verify(x_admin_password: str = Header(default="")):
+        _check_admin_password(x_admin_password)
+        return {"ok": True}
 
     @app.get("/healthz")
     def healthz():

@@ -18,7 +18,7 @@ from PySide6.QtCore import QSettings, QStandardPaths
 from app_runtime import baseline_path as bundled_baseline_path
 from baseline.seed import seed_if_empty
 from baseline.store import BaselineRepository, ProjectInfo
-from ui import api_config
+from ui import cloud_bootstrap
 
 _ACTIVE_KEY = "baseline/active_project"
 # Either a local BaselineRepository or a cloud HttpBaselineRepository (same
@@ -39,12 +39,14 @@ def _cloud_cache_root() -> Path:
 def repository() -> Any:
     global _repo
     if _repo is None:
-        if api_config.has_cloud():
-            # Cloud mode: the server owns seeding + governance; no local seed.
+        if cloud_bootstrap.is_configured():
+            # Cloud mode (the internal-tool default): the baked-in endpoint +
+            # shared token mean ordinary users configure nothing. The server owns
+            # seeding + governance; no local seed.
             from cloud.client import HttpBaselineRepository
 
             _repo = HttpBaselineRepository(
-                api_config.load_cloud_url(), api_config.load_cloud_token(), _cloud_cache_root()
+                cloud_bootstrap.baseline_endpoint(), cloud_bootstrap.client_token(), _cloud_cache_root()
             )
         else:
             _repo = BaselineRepository(_store_root())

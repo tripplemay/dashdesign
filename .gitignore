@@ -52,3 +52,6 @@ dist/
 *.notarytool-profile
 .env
 .env.*
+
+# Baked shared client token (internal) — never commit
+ui/_secrets.py

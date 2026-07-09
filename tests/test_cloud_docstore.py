@@ -21,7 +21,7 @@ def _settings(tmp_path, doc_store="local", bucket="", endpoint=""):
     return Settings(
         db_url="sqlite://", doc_store=doc_store, doc_root=tmp_path / "docs",
         oss_bucket=bucket, oss_endpoint=endpoint, oss_prefix="baseline-docs/",
-        admin_token="", seed_demo=False,
+        admin_token="", admin_password="", seed_demo=False,
     )
 
 

@@ -109,7 +109,26 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Workspace-wide role (reviewer|editor|admin) applied to every project — used
+    # by the shared internal client identity so every seat sees all baselines
+    # without per-project membership. NULL means "only per-project memberships".
+    global_role: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class AppConfig(Base):
+    """Single-row shared client bootstrap config (image API endpoint/key/model).
+
+    Fetched by every client so ordinary users need no local setup; edited only by
+    an admin (via the admin password) and pushed here.
+    """
+
+    __tablename__ = "app_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    data: Mapped[dict[str, Any]] = mapped_column(JsonDoc, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+    updated_by: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
 
 class Token(Base):

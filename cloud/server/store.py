@@ -243,3 +243,19 @@ class SqlBaselineStore:
         if job is None:
             raise NotFoundError(f"任务不存在：{job_id}")
         return job
+
+    # -- shared app config ---------------------------------------------
+    def get_app_config(self) -> dict:
+        row = self.s.get(db.AppConfig, 1)
+        return dict(row.data) if row and row.data else {}
+
+    def set_app_config(self, data: dict, updated_by: Optional[str] = None) -> dict:
+        row = self.s.get(db.AppConfig, 1)
+        if row is None:
+            row = db.AppConfig(id=1, data=data, updated_by=updated_by)
+            self.s.add(row)
+        else:
+            row.data = data
+            row.updated_by = updated_by
+        self.s.flush()
+        return dict(row.data)

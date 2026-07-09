@@ -1,8 +1,9 @@
-"""Application settings dialog: API credentials + appearance.
+"""Application settings dialog: appearance (everyone) + cloud config (admin only).
 
-Single home for user preferences. API base URL + key persist via
-``ui.api_config``; the appearance (theme) section drives the shared
-``ui.theme`` manager with live preview and cancel-to-revert.
+Ordinary users only see the appearance section — the image-API endpoint/key and
+baseline endpoint are fetched from the cloud automatically, so there is nothing
+for them to set. An admin unlocks the cloud-config section with the admin
+password, edits it, and uploads it; every client picks it up on the next fetch.
 """
 
 from __future__ import annotations
@@ -13,14 +14,16 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QRadioButton,
     QVBoxLayout,
     QWidget,
 )
 
-from ui import api_config, theme
+from ui import cloud_bootstrap, theme
 
 _THEME_MODES = (("system", "跟随系统"), ("light", "浅色"), ("dark", "深色"))
 
@@ -29,72 +32,23 @@ class SettingsDialog(QDialog):
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(520)
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        layout.addWidget(self._build_api_group())
-        layout.addWidget(self._build_cloud_group())
         layout.addWidget(self._build_appearance_group())
+        layout.addWidget(self._build_admin_cloud_group())
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("保存")
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("关闭")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self._on_cancel)
         layout.addWidget(buttons)
 
-    def _build_api_group(self) -> QGroupBox:
-        group = QGroupBox("API")
-        grid = QGridLayout(group)
-        self.base_url_edit = QLineEdit(api_config.load_base_url())
-        self.base_url_edit.setPlaceholderText("可选：OpenAI-compatible base URL")
-        self.api_key_edit = QLineEdit(api_config.load_api_key())
-        self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key_edit.setPlaceholderText("必填：图像 API Key")
-        self.model_edit = QLineEdit(api_config.load_baseline_model())
-        self.model_edit.setPlaceholderText("文档合并用的文本模型，如 gpt-4o（需网关支持）")
-        hint = QLabel(
-            "填写后自动保存到本机（当前用户），下次启动自动填入，无需重复输入。"
-            "留空 Base URL/Key 时回退到系统环境变量 OPENAI_BASE_URL / OPENAI_API_KEY。"
-            "“文档合并模型”须填你的网关实际支持的模型名（本网关仅支持 OpenAI 系，如 gpt-4o）。"
-        )
-        hint.setObjectName("Subtitle")
-        hint.setWordWrap(True)
-        grid.addWidget(QLabel("Base URL"), 0, 0)
-        grid.addWidget(self.base_url_edit, 0, 1)
-        grid.addWidget(QLabel("API Key"), 1, 0)
-        grid.addWidget(self.api_key_edit, 1, 1)
-        grid.addWidget(QLabel("文档合并模型"), 2, 0)
-        grid.addWidget(self.model_edit, 2, 1)
-        grid.addWidget(hint, 3, 0, 1, 2)
-        grid.setColumnStretch(1, 1)
-        return group
-
-    def _build_cloud_group(self) -> QGroupBox:
-        group = QGroupBox("云端基线（可选）")
-        grid = QGridLayout(group)
-        self.cloud_url_edit = QLineEdit(api_config.load_cloud_url())
-        self.cloud_url_edit.setPlaceholderText("云端基线服务地址，如 https://baseline.example.com")
-        self.cloud_token_edit = QLineEdit(api_config.load_cloud_token())
-        self.cloud_token_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.cloud_token_edit.setPlaceholderText("访问令牌（Bearer Token）")
-        hint = QLabel(
-            "同时填写地址与令牌后，基线改为云端存储（多人共享、多项目并行、服务端治理）。"
-            "留空则使用本机基线库。修改后立即生效。"
-        )
-        hint.setObjectName("Subtitle")
-        hint.setWordWrap(True)
-        grid.addWidget(QLabel("服务地址"), 0, 0)
-        grid.addWidget(self.cloud_url_edit, 0, 1)
-        grid.addWidget(QLabel("访问令牌"), 1, 0)
-        grid.addWidget(self.cloud_token_edit, 1, 1)
-        grid.addWidget(hint, 2, 0, 1, 2)
-        grid.setColumnStretch(1, 1)
-        return group
-
+    # -- appearance (everyone) -----------------------------------------
     def _build_appearance_group(self) -> QGroupBox:
         group = QGroupBox("外观")
         box = QVBoxLayout(group)
@@ -111,18 +65,117 @@ class SettingsDialog(QDialog):
         return group
 
     def _preview_theme(self, mode: str) -> None:
-        # 实时预览；取消时在 _on_cancel 里恢复。
         manager = theme.manager()
         if manager is not None:
             manager.set_mode(mode)
 
-    def _on_save(self) -> None:
-        api_config.save(self.base_url_edit.text(), self.api_key_edit.text(), self.model_edit.text())
-        api_config.save_cloud(self.cloud_url_edit.text(), self.cloud_token_edit.text())
-        # A changed cloud endpoint/token must swap the active repository.
+    # -- cloud config (admin only) -------------------------------------
+    def _build_admin_cloud_group(self) -> QGroupBox:
+        group = QGroupBox("云端配置（仅管理员）")
+        outer = QVBoxLayout(group)
+
+        hint = QLabel(
+            "普通用户无需任何设置：图像 API 与基线端点会自动从云端获取。"
+            "管理员在此配置并上传，所有人下次启动自动生效。"
+        )
+        hint.setObjectName("Subtitle")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
+
+        gate = QHBoxLayout()
+        self.admin_pw_edit = QLineEdit()
+        self.admin_pw_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.admin_pw_edit.setPlaceholderText("管理密码")
+        self.admin_pw_edit.returnPressed.connect(self._unlock)
+        self.unlock_btn = QPushButton("解锁")
+        self.unlock_btn.clicked.connect(self._unlock)
+        gate.addWidget(QLabel("管理密码"))
+        gate.addWidget(self.admin_pw_edit, 1)
+        gate.addWidget(self.unlock_btn)
+        outer.addLayout(gate)
+
+        self.cfg_container = QWidget()
+        grid = QGridLayout(self.cfg_container)
+        grid.setContentsMargins(0, 6, 0, 0)
+        cfg = cloud_bootstrap.cached_app_config()
+        self.cfg_baseline_ep = QLineEdit(str(cfg.get("baseline_endpoint", "") or ""))
+        self.cfg_baseline_ep.setPlaceholderText("留空 = 使用默认云端地址")
+        self.cfg_api_base = QLineEdit(str(cfg.get("image_api_base_url", "") or ""))
+        self.cfg_api_base.setPlaceholderText("图像 API Base URL")
+        self.cfg_api_key = QLineEdit(str(cfg.get("image_api_key", "") or ""))
+        self.cfg_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.cfg_api_key.setPlaceholderText("图像 API Key")
+        self.cfg_model = QLineEdit(str(cfg.get("baseline_model", "") or "gpt-4o"))
+        self.cfg_model.setPlaceholderText("文档合并模型，如 gpt-4o")
+        self.save_cloud_btn = QPushButton("保存并上传云端")
+        self.save_cloud_btn.clicked.connect(self._save_cloud)
+        grid.addWidget(QLabel("基线端点"), 0, 0)
+        grid.addWidget(self.cfg_baseline_ep, 0, 1)
+        grid.addWidget(QLabel("图像 API 端点"), 1, 0)
+        grid.addWidget(self.cfg_api_base, 1, 1)
+        grid.addWidget(QLabel("图像 API Key"), 2, 0)
+        grid.addWidget(self.cfg_api_key, 2, 1)
+        grid.addWidget(QLabel("文档合并模型"), 3, 0)
+        grid.addWidget(self.cfg_model, 3, 1)
+        grid.addWidget(self.save_cloud_btn, 4, 1)
+        grid.setColumnStretch(1, 1)
+        self.cfg_container.setEnabled(False)
+        outer.addWidget(self.cfg_container)
+
+        self.cloud_status = QLabel("")
+        self.cloud_status.setObjectName("Subtitle")
+        self.cloud_status.setWordWrap(True)
+        outer.addWidget(self.cloud_status)
+        return group
+
+    def _unlock(self) -> None:
+        password = self.admin_pw_edit.text().strip()
+        if not password:
+            self.cloud_status.setText("请输入管理密码。")
+            return
+        try:
+            ok = cloud_bootstrap.verify_admin(password)
+        except Exception as exc:  # noqa: BLE001
+            self.cloud_status.setText(f"无法连接云端：{exc}")
+            return
+        if not ok:
+            self.cloud_status.setText("管理密码错误。")
+            return
+        self.cfg_container.setEnabled(True)
+        self.unlock_btn.setEnabled(False)
+        self.admin_pw_edit.setEnabled(False)
+        cfg = cloud_bootstrap.fetch_app_config()
+        self.cfg_baseline_ep.setText(str(cfg.get("baseline_endpoint", "") or ""))
+        self.cfg_api_base.setText(str(cfg.get("image_api_base_url", "") or ""))
+        self.cfg_api_key.setText(str(cfg.get("image_api_key", "") or ""))
+        self.cfg_model.setText(str(cfg.get("baseline_model", "") or "gpt-4o"))
+        self.cloud_status.setText("已解锁，可编辑并上传。")
+
+    def _save_cloud(self) -> None:
+        password = self.admin_pw_edit.text().strip()
+        config = {
+            "baseline_endpoint": self.cfg_baseline_ep.text().strip(),
+            "image_api_base_url": self.cfg_api_base.text().strip(),
+            "image_api_key": self.cfg_api_key.text().strip(),
+            "baseline_model": self.cfg_model.text().strip() or "gpt-4o",
+        }
+        try:
+            cloud_bootstrap.push_app_config(password, config)
+        except PermissionError:
+            self.cloud_status.setText("管理密码错误。")
+            return
+        except Exception as exc:  # noqa: BLE001
+            self.cloud_status.setText(f"上传失败：{exc}")
+            return
+        # A changed baseline endpoint must swap the active repository.
         from ui import baseline_service
 
         baseline_service.reset_repository()
+        self.cloud_status.setText("已保存并上传，所有用户下次启动自动生效。")
+
+    # -- dialog buttons -------------------------------------------------
+    def _on_save(self) -> None:
+        # Theme preview is already applied live; just keep it.
         self.accept()
 
     def _on_cancel(self) -> None:

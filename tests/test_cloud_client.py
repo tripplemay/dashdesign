@@ -53,7 +53,7 @@ def live_base(tmp_path):
     settings = Settings(
         db_url=f"sqlite:///{tmp_path / 'cloud.db'}", doc_store="local",
         doc_root=tmp_path / "docs", oss_bucket="", oss_endpoint="", oss_prefix="p/",
-        admin_token=_ADMIN, seed_demo=False,
+        admin_token=_ADMIN, admin_password="pw", seed_demo=False,
     )
     app = create_app(settings=settings, chat_factory=lambda model: _fake_chat)
     server = _Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))

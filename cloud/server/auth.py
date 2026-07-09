@@ -27,6 +27,7 @@ class Principal:
     user_id: str
     name: str
     is_admin: bool
+    global_role: Optional[str] = None
 
 
 def hash_token(token: str) -> str:
@@ -50,15 +51,28 @@ def principal_for_token(session: Session, token: str) -> Optional[Principal]:
     user = session.get(db.User, row.user_id)
     if user is None:
         return None
-    return Principal(user_id=user.id, name=user.name, is_admin=user.is_admin)
+    return Principal(
+        user_id=user.id, name=user.name, is_admin=user.is_admin, global_role=user.global_role
+    )
 
 
 def role_for(session: Session, baseline_id: str, principal: Principal) -> Optional[str]:
-    """Effective role of ``principal`` on ``baseline_id`` (global admin -> admin)."""
+    """Effective role of ``principal`` on ``baseline_id``.
+
+    The highest of: global admin, workspace-wide ``global_role``, and per-project
+    membership. Lets the shared internal identity act workspace-wide.
+    """
     if principal.is_admin:
         return "admin"
+    candidates = []
+    if principal.global_role:
+        candidates.append(principal.global_role)
     membership = session.get(db.Membership, {"baseline_id": baseline_id, "user_id": principal.user_id})
-    return membership.role if membership else None
+    if membership:
+        candidates.append(membership.role)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda r: _ROLE_RANK.get(r, 0))
 
 
 def ensure_user_with_token(
@@ -67,20 +81,22 @@ def ensure_user_with_token(
     name: str,
     token: str,
     is_admin: bool = False,
+    global_role: Optional[str] = None,
 ) -> Principal:
     """Idempotently create a user + bearer token (bootstrap / tests / CLI)."""
     user = session.get(db.User, user_id)
     if user is None:
-        user = db.User(id=user_id, name=name, is_admin=is_admin)
+        user = db.User(id=user_id, name=name, is_admin=is_admin, global_role=global_role)
         session.add(user)
     else:
         user.name = name
         user.is_admin = is_admin
+        user.global_role = global_role
     token_hash = hash_token(token)
     if session.get(db.Token, token_hash) is None:
         session.add(db.Token(token_hash=token_hash, user_id=user_id))
     session.flush()
-    return Principal(user_id=user_id, name=name, is_admin=is_admin)
+    return Principal(user_id=user_id, name=name, is_admin=is_admin, global_role=global_role)
 
 
 def add_member(session: Session, baseline_id: str, user_id: str, role: str) -> None:
