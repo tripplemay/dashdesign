@@ -93,6 +93,29 @@ class TestExtract:
         assert "保证考上名校" not in texts  # 幻觉引文被接地校验拦掉
         assert result["document"]["document_id"]
 
+    def test_nonstandard_shape_is_salvaged(self, tmp_path: Path, bundled_baseline: dict) -> None:
+        # 复现网关模型不遵守 json_schema、自创字段名的情形，应被 _adapt 抢救
+        parsed = self._parsed(tmp_path, "商业皮肤学课程产品化方案，面向美业代理的成交系统。")
+
+        def fake_chat(messages, response_format=None):  # noqa: ANN001
+            return json.dumps({
+                "project": "商业皮肤学",
+                "audience_mode": "to_b_partnership",
+                "consumer_baseline": {"titles": [], "subtitles": []},
+                "source_facts": {
+                    "consumer_safe_facts": [],
+                    "business_terms": [
+                        {"type": "topic", "text": "商业皮肤学课程产品化方案",
+                         "evidence": {"quote": "商业皮肤学课程产品化方案"}}
+                    ],
+                },
+            }, ensure_ascii=False)
+
+        result = extract_candidates(parsed, bundled_baseline, fake_chat)
+        assert len(result["candidates"]) == 1
+        assert result["candidates"][0]["target"] == "source_facts.business_terms"
+        assert result["candidates"][0]["text"] == "商业皮肤学课程产品化方案"
+
     def test_whitespace_quote_not_grounded(self, tmp_path: Path, bundled_baseline: dict) -> None:
         parsed = self._parsed(tmp_path, "孩子提升表达力。")
 
