@@ -13,6 +13,7 @@ import csv
 import fnmatch
 import gc
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,6 +55,34 @@ def effective_dpi(spec: SourceSpec) -> float:
     width_dpi = spec.source_width / (spec.width_cm / 2.54)
     height_dpi = spec.source_height / (spec.height_cm / 2.54)
     return min(width_dpi, height_dpi)
+
+
+# 超分输入上限：源边过大时超分很慢且收益低，直接走 PIL。
+SR_MAX_INPUT_EDGE = 4300
+SR_MAX_INPUT_PIXELS = 12_000_000
+
+
+def run_realesrgan(
+    source: Path,
+    destination: Path,
+    binary: Path,
+    model_dir: Path,
+    model: str = "realesrgan-x4plus",
+    tile_size: int = 512,
+    thread_counts: str = "1:1:1",
+    timeout: int = 900,
+) -> None:
+    """Real-ESRGAN x4 super-resolution (ncnn/vulkan binary). Raises on failure."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        str(binary), "-i", str(source), "-o", str(destination),
+        "-m", str(model_dir), "-s", "4", "-n", model,
+        "-t", str(tile_size), "-j", thread_counts, "-f", "png",
+    ]
+    subprocess.run(
+        command, check=True, timeout=timeout,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
 
 
 def aspect_delta_percent(source_size: tuple[int, int], target_size: tuple[int, int]) -> float:

@@ -128,7 +128,14 @@ def build_text_image_command(form: TextImageForm):
         command += ["--poster-copy", poster_copy]
     command.append("--execute")  # GUI 无离线模式：始终调用 API
     if form.postprocess:
-        command.append("--postprocess-print")
+        command += [
+            "--postprocess-print",
+            # 印刷后处理用 Real-ESRGAN 超分（脚本在二进制存在时启用，否则回退 PIL）
+            "--realesrgan-binary",
+            str(runtime_tool_path()),
+            "--realesrgan-model-dir",
+            str(runtime_model_dir()),
+        ]
 
     return command, output_dir, api_env(form.base_url, form.api_key)
 

@@ -21,9 +21,12 @@ import progress
 
 from image_api_client import execute_image_generation
 from prepare_print_assets import (
+    SR_MAX_INPUT_EDGE,
+    SR_MAX_INPUT_PIXELS,
     aspect_delta_percent,
     enhance,
     fit_with_blurred_background,
+    run_realesrgan,
     save_print_image,
     target_pixels,
 )
@@ -1210,15 +1213,51 @@ def write_run_script(path: Path, request_json_name: str, output_name: str) -> No
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+def _superres_master(
+    master_path: Path,
+    target_size: "tuple[int, int]",
+    realesrgan_binary: "Path | None",
+    realesrgan_model_dir: "Path | None",
+    realesrgan_model: str,
+) -> "tuple[Path, bool]":
+    """Return (image_path_for_resize, sr_applied). Runs Real-ESRGAN x4 when
+    configured and beneficial (we're upscaling a not-too-large master), else the
+    master path unchanged so the caller falls back to plain Lanczos."""
+    if not realesrgan_binary or not Path(realesrgan_binary).exists():
+        return master_path, False
+    if not realesrgan_model_dir or not Path(realesrgan_model_dir).exists():
+        return master_path, False
+    with Image.open(master_path) as probe:
+        mw, mh = probe.size
+    # 只在放大且母版不过大时超分
+    if mw * mh >= target_size[0] * target_size[1]:
+        return master_path, False
+    if max(mw, mh) > SR_MAX_INPUT_EDGE or mw * mh > SR_MAX_INPUT_PIXELS:
+        return master_path, False
+    sr_path = master_path.parent / "_sr" / f"{master_path.stem}_realesrgan_x4.png"
+    try:
+        run_realesrgan(master_path, sr_path, Path(realesrgan_binary), Path(realesrgan_model_dir), realesrgan_model)
+    except Exception as exc:  # noqa: BLE001 - 超分失败退回 PIL，不阻断出图
+        print(f"[warn] Real-ESRGAN 超分失败，回退基础缩放：{exc}", file=sys.stderr)
+        return master_path, False
+    return sr_path, True
+
+
 def prepare_print_output(
     master_path: Path,
     output_path: Path,
     width_cm: float,
     height_cm: float,
     dpi: int,
+    realesrgan_binary: "Path | None" = None,
+    realesrgan_model_dir: "Path | None" = None,
+    realesrgan_model: str = "realesrgan-x4plus",
 ) -> dict[str, Any]:
     target_size = target_pixels(width_cm, height_cm, dpi)
-    with Image.open(master_path) as raw:
+    source_path, sr_applied = _superres_master(
+        master_path, target_size, realesrgan_binary, realesrgan_model_dir, realesrgan_model
+    )
+    with Image.open(source_path) as raw:
         icc_profile = raw.info.get("icc_profile")
         image = ImageOps.exif_transpose(raw).convert("RGB")
 
@@ -1238,9 +1277,12 @@ def prepare_print_output(
 
     image.close()
     prepared.close()
+    if sr_applied and source_path != master_path:
+        source_path.unlink(missing_ok=True)
     return {
         "status": "generated",
         "output": str(output_path),
+        "backend": "realesrgan_x4plus" if sr_applied else "pil_lanczos",
         "target_cm": f"{cm_label(width_cm)}x{cm_label(height_cm)}",
         "target_dpi": dpi,
         "output_px": f"{output_width}x{output_height}",
@@ -1271,6 +1313,9 @@ def build_package(
     modules: list[str] | None,
     cta: str | None,
     allow_blocked_terms: bool,
+    realesrgan_binary: "Path | None" = None,
+    realesrgan_model_dir: "Path | None" = None,
+    realesrgan_model: str = "realesrgan-x4plus",
 ) -> Path:
     if mode not in MODE_CHOICES:
         raise ValueError(f"Mode must be one of: {', '.join(MODE_CHOICES)}")
@@ -1436,6 +1481,9 @@ def build_package(
                         width_cm,
                         height_cm,
                         dpi,
+                        realesrgan_binary,
+                        realesrgan_model_dir,
+                        realesrgan_model,
                     )
                     if mode == MODE_POSTER:
                         status["poster_print_output"] = compose_poster_copy(
@@ -1546,6 +1594,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="After API generation, resize the master to the requested print pixels.",
     )
     parser.add_argument(
+        "--realesrgan-binary",
+        type=Path,
+        default=Path("tools/realesrgan-ncnn-vulkan"),
+        help="Real-ESRGAN 二进制；印刷后处理时用它做超分（存在则启用，否则回退 PIL）。",
+    )
+    parser.add_argument("--realesrgan-model-dir", type=Path, default=Path("tools/models"))
+    parser.add_argument("--realesrgan-model", default="realesrgan-x4plus")
+    parser.add_argument(
         "--allow-blocked-terms",
         action="store_true",
         help=argparse.SUPPRESS,
@@ -1577,6 +1633,9 @@ def main() -> int:
             args.modules,
             args.cta,
             args.allow_blocked_terms,
+            realesrgan_binary=args.realesrgan_binary,
+            realesrgan_model_dir=args.realesrgan_model_dir,
+            realesrgan_model=args.realesrgan_model,
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)

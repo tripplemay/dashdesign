@@ -101,9 +101,11 @@ The desktop client always calls the image API (there is no offline toggle;
 the `立即调用 API` checkbox was removed). It uses the API base URL and key from
 文件 → 设置 (see API Settings below); if none is configured it refuses to
 run and points you there. When print post-processing is enabled, the generated
-master is resized to the requested centimeter size and DPI. (The underlying
-`scripts/text_to_image_print.py` still supports an offline `--execute`-less run
-for command-line use.)
+master is upscaled to the requested centimeter size and DPI using **Real-ESRGAN
+x4** super-resolution (the same engine as batch style-preserved output),
+falling back to PIL/Lanczos only if the Real-ESRGAN binary is unavailable or the
+master is already large. (The underlying `scripts/text_to_image_print.py` still
+supports an offline `--execute`-less run for command-line use.)
 
 Keep the visual prompt and poster copy separate. The visual prompt should
 describe scene, subject, mood, layout, and safe areas. The poster copy field can

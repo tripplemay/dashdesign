@@ -215,6 +215,9 @@ def build_package(
     execute: bool,
     postprocess_print: bool,
     allow_blocked_terms: bool,
+    realesrgan_binary: "Path | None" = None,
+    realesrgan_model_dir: "Path | None" = None,
+    realesrgan_model: str = "realesrgan-x4plus",
 ) -> Path:
     if width_cm <= 0 or height_cm <= 0:
         raise ValueError("Width and height must be positive centimeters")
@@ -383,7 +386,7 @@ def build_package(
                 print_output = candidate_dir / "print_ready" / (
                     f"{cm_label(width_cm)}乘以{cm_label(height_cm)}_整图海报候选{index:02d}.jpg"
                 )
-                print_status = {"candidate": index, **prepare_print_output(candidate_dir / master_name, print_output, width_cm, height_cm, dpi)}
+                print_status = {"candidate": index, **prepare_print_output(candidate_dir / master_name, print_output, width_cm, height_cm, dpi, realesrgan_binary, realesrgan_model_dir, realesrgan_model)}
             status["print_output"].append(print_status)
 
         candidate_state = {"error": "fail", "skipped": "skip"}.get(
@@ -441,6 +444,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidates", type=int, default=4)
     parser.add_argument("--execute", action="store_true", help="Call the Image API now.")
     parser.add_argument("--postprocess-print", action="store_true", help="Resize generated candidates to print pixels.")
+    parser.add_argument("--realesrgan-binary", type=Path, default=Path("tools/realesrgan-ncnn-vulkan"))
+    parser.add_argument("--realesrgan-model-dir", type=Path, default=Path("tools/models"))
+    parser.add_argument("--realesrgan-model", default="realesrgan-x4plus")
     parser.add_argument("--allow-blocked-terms", action="store_true", help=argparse.SUPPRESS)
     return parser
 
@@ -471,6 +477,9 @@ def main() -> int:
             args.execute,
             args.postprocess_print,
             args.allow_blocked_terms,
+            realesrgan_binary=args.realesrgan_binary,
+            realesrgan_model_dir=args.realesrgan_model_dir,
+            realesrgan_model=args.realesrgan_model,
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)

@@ -133,6 +133,17 @@ class TestTextImageCommand:
         command, _, _ = build_text_image_command(text_image_form())
         assert "--text-style" not in command
 
+    def test_postprocess_passes_realesrgan(self) -> None:
+        command, _, _ = build_text_image_command(text_image_form(postprocess=True))
+        assert "--postprocess-print" in command
+        assert "--realesrgan-binary" in command
+        assert "--realesrgan-model-dir" in command
+
+    def test_no_postprocess_no_realesrgan(self) -> None:
+        command, _, _ = build_text_image_command(text_image_form(postprocess=False))
+        assert "--postprocess-print" not in command
+        assert "--realesrgan-binary" not in command
+
 
 class TestBatchCommand:
     def batch_form(self, tmp_path: Path, **overrides: object) -> BatchForm:
