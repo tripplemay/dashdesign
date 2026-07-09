@@ -38,6 +38,16 @@ def _fake_chat(messages, response_format=None):  # noqa: ANN001
                         "quote": "产品化成一套新美业成交系统"},
         "business_context": {"text": "面向美业代理的成交与复购体系",
                              "quote": "会诊断、会成交、会复购"},
+        "audience": {"primary_decision_maker": "美业代理/美容院老板娘",
+                     "end_user": "爱美客户", "secondary_audience": ["美业团队长"]},
+        "visual": {
+            "style_keywords": ["专业", "高端护肤", "干净通透", "科技美学"],
+            "recommended_subjects": ["专业护肤咨询场景", "皮肤诊断与方案讲解"],
+            "recommended_scenes": ["美业沙龙现场", "一对一皮肤诊断桌面"],
+            "composition_rules": ["保留顶部标题安全区", "不要生成可读文字"],
+        },
+        "positive_prompt_template": "Generate a clean, premium skincare-business poster background: professional skin-consultation salon, diagnosis scene, no readable text.",
+        "system_context": "为商业皮肤学（面向美业人的成交型培训）生成海报背景。",
         "modules": [
             {"name": "美肌品鉴会", "description": "教育市场、建立专业信任", "quote": "建立专业信任"},
             {"name": "个人皮肤诊断", "description": "梳理皮肤历史", "quote": "梳理皮肤历史"},
@@ -86,6 +96,23 @@ def test_generate_valid_new_domain_baseline(tmp_path: Path, template: dict) -> N
     # 证据都接地到本文档
     assert draft["evidence_index"]
     assert all(e["document_id"] == "lbx" for e in draft["evidence_index"])
+    # 关键：正向视觉方向/受众/正向模板必须是本领域，不能残留少儿 AI 艺术
+    # （negative_constraints / avoid_scenes 是"避免"指令，允许出现 children 等词，故不纳入检查）
+    vg = draft["visual_guidelines"]
+    positive_blob = json.dumps(
+        {
+            "style": vg["style_keywords"], "subjects": vg["recommended_subjects"],
+            "scenes": vg["recommended_scenes"], "composition": vg["composition_rules"],
+            "positive": draft["prompt_policy"]["positive_prompt_template"],
+            "system": draft["prompt_policy"]["system_context"],
+            "audience": draft["consumer_baseline"]["audience"],
+        },
+        ensure_ascii=False,
+    ).lower()
+    for banned in ("孩子", "少儿", "数字艺术", "未来教室", "children", "classroom"):
+        assert banned.lower() not in positive_blob, f"正向视觉方向残留了 {banned}"
+    assert draft["consumer_baseline"]["audience"]["end_user"] == "爱美客户"
+    assert any("护肤" in s or "美业" in s for s in vg["recommended_scenes"])
 
 
 def test_generate_falls_back_when_model_empty(tmp_path: Path, template: dict) -> None:
