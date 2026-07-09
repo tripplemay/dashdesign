@@ -7,6 +7,7 @@ append-only versioning are enforced in one place.
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -50,6 +51,9 @@ _AUDIENCE_LABELS = {
 
 class BaselinePage(QWidget):
     projectChanged = Signal()
+    # 后台加载 overview 完成/失败后回主线程（跨线程 emit -> Qt 自动 QueuedConnection）。
+    _overviewReady = Signal(object, int)
+    _overviewFailed = Signal(str, int)
 
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
@@ -144,6 +148,11 @@ class BaselinePage(QWidget):
         scroll.setWidget(self._sections_container)
         layout.addWidget(scroll, 1)
 
+        # 异步加载：切换/刷新时后台拉 overview，seq 保证只应用最新一次结果。
+        self._overview_seq = 0
+        self._overviewReady.connect(self._apply_overview)
+        self._overviewFailed.connect(self._on_overview_failed)
+        baseline_service.repository()  # 主线程预热单例，避免多后台线程首次并发初始化
         self.reload()
 
     # -- selection state ----------------------------------------------
@@ -154,41 +163,83 @@ class BaselinePage(QWidget):
         return self.version_combo.currentData()
 
     def reload(self) -> None:
-        repo = baseline_service.repository()
-        active_project = baseline_service.active_project_id()
+        """Refresh keeping the current selection (async; never blocks the UI)."""
+        self._refresh(self._current_project(), self._current_version())
+
+    def _refresh(
+        self, selected_project: Optional[str] = None, selected_version: Optional[str] = None
+    ) -> None:
+        """Load the overview off the UI thread; only the latest request is applied."""
+        self._overview_seq += 1
+        seq = self._overview_seq
+        self.status_hint.setText("加载中…")
+
+        def worker() -> None:
+            try:
+                overview = baseline_service.load_overview(selected_project, selected_version)
+            except Exception as exc:  # noqa: BLE001 — surface any load error on the UI thread
+                self._overviewFailed.emit(str(exc), seq)
+                return
+            self._overviewReady.emit(overview, seq)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_overview(self, overview: "baseline_service.BaselineOverview", seq: int) -> None:
+        if seq != self._overview_seq:
+            return  # 过期结果（用户已再次切换），丢弃
         self.project_combo.blockSignals(True)
+        self.version_combo.blockSignals(True)
         self.project_combo.clear()
-        for info in repo.list_projects():
-            label = f"{info.name}（{info.baseline_id}）"
-            self.project_combo.addItem(label, info.baseline_id)
-        if active_project:
-            idx = self.project_combo.findData(active_project)
+        for info in overview.projects:
+            self.project_combo.addItem(f"{info.name}（{info.baseline_id}）", info.baseline_id)
+        if overview.active_project_id:
+            idx = self.project_combo.findData(overview.active_project_id)
             if idx >= 0:
                 self.project_combo.setCurrentIndex(idx)
-        self.project_combo.blockSignals(False)
-        self._reload_versions()
-
-    def _reload_versions(self) -> None:
-        repo = baseline_service.repository()
-        project_id = self._current_project()
-        self.version_combo.blockSignals(True)
         self.version_combo.clear()
-        active_version = None
-        if project_id:
-            info = repo.get_project(project_id)
-            active_version = info.active_version if info else None
-            for version in reversed(repo.list_versions(project_id)):
-                try:
-                    data = repo.load_version(project_id, version)
-                    status = _STATUS_LABELS.get(str(data.get("status")), str(data.get("status")))
-                except BaselineError:
-                    status = "?"
-                marker = " ★活跃" if version == active_version else ""
-                self.version_combo.addItem(f"{version} · {status}{marker}", version)
+        for summary in reversed(overview.versions):  # 最新版本显示在最上（overview.versions 为升序）
+            status = _STATUS_LABELS.get(summary.status, summary.status)
+            marker = " ★活跃" if summary.version == overview.active_version else ""
+            self.version_combo.addItem(f"{summary.version} · {status}{marker}", summary.version)
+        if overview.selected_version:
+            idx = self.version_combo.findData(overview.selected_version)
+            if idx >= 0:
+                self.version_combo.setCurrentIndex(idx)
+        self.project_combo.blockSignals(False)
         self.version_combo.blockSignals(False)
-        if self.version_combo.count():
-            self.version_combo.setCurrentIndex(0)
-        self._render_selected()
+        self._render_overview(overview)
+
+    def _on_overview_failed(self, message: str, seq: int) -> None:
+        if seq != self._overview_seq:
+            return
+        self._clear_sections()
+        self._set_meta("加载失败", "-", "-", "-")
+        self._add_text_section("错误", message)
+        self._toggle_actions(None, None)
+        self.status_hint.setText("加载失败")
+
+    def _render_overview(self, overview: "baseline_service.BaselineOverview") -> None:
+        self._clear_sections()
+        payload = overview.selected_payload
+        if not overview.active_project_id or not overview.selected_version or payload is None:
+            self._set_meta("（无项目）", "-", "-", "-")
+            self._toggle_actions(None, overview.active_version)
+            self.status_hint.setText("")
+            return
+        project = payload.get("project", {}) if isinstance(payload, dict) else {}
+        status = str(payload.get("status", "-"))
+        mode = str(payload.get("target_audience_mode", "-"))
+        self._set_meta(
+            str(project.get("name", "-")),
+            str(payload.get("version", "-")),
+            _STATUS_LABELS.get(status, status),
+            _AUDIENCE_LABELS.get(mode, mode),
+        )
+        self.status_hint.setText(
+            f"活跃版本：{overview.active_version or '无'} · 加载 {datetime.now():%H:%M:%S}"
+        )
+        self._toggle_actions(payload, overview.active_version)
+        self._build_sections(payload)
 
     def _new_project(self) -> None:
         dialog = NewProjectDialog(self)
@@ -200,19 +251,13 @@ class BaselinePage(QWidget):
         if not dialog.created_id:
             return
         self.projectChanged.emit()  # 新项目已设为活跃
-        self.reload()
-        self._select_project(dialog.created_id)
+        self._refresh(selected_project=dialog.created_id)
         QMessageBox.information(
             self,
             "已创建项目",
             f"项目「{dialog.created_id}」已创建为草稿并设为活跃。"
             "可通过“上传文档合并”补充内容，校验通过后发布。",
         )
-
-    def _select_project(self, baseline_id: str) -> None:
-        idx = self.project_combo.findData(baseline_id)
-        if idx >= 0:
-            self.project_combo.setCurrentIndex(idx)
 
     # -- 从文档生成新项目（异步）--------------------------------------
     def _start_generate_project(self, req: dict) -> None:
@@ -270,8 +315,7 @@ class BaselinePage(QWidget):
         except BaselineError:
             pass
         self.projectChanged.emit()
-        self.reload()
-        self._select_project(info.baseline_id)
+        self._refresh(selected_project=info.baseline_id)
         QMessageBox.information(
             self, "已从文档生成项目",
             f"项目「{info.baseline_id}」已生成为草稿并设为活跃（采纳 {len(report.accepted_changes())} 条候选）。"
@@ -283,49 +327,17 @@ class BaselinePage(QWidget):
         if project_id:
             baseline_service.set_active_project(project_id)
             self.projectChanged.emit()
-        self._reload_versions()
+        self._refresh(selected_project=project_id)
 
     def _on_version_changed(self) -> None:
-        self._render_selected()
+        self._refresh(self._current_project(), self._current_version())
 
     # -- rendering -----------------------------------------------------
-    def _render_selected(self) -> None:
-        self._clear_sections()
-        project_id = self._current_project()
-        version = self._current_version()
-        if not project_id or not version:
-            self._set_meta("（无项目）", "-", "-", "-")
-            self._toggle_actions(None)
-            return
-        try:
-            payload = baseline_service.repository().load_version(project_id, version)
-        except BaselineError as exc:
-            self._set_meta("读取失败", "-", "-", "-")
-            self._add_text_section("错误", str(exc))
-            self._toggle_actions(None)
-            return
-        project = payload.get("project", {}) if isinstance(payload, dict) else {}
-        status = str(payload.get("status", "-"))
-        mode = str(payload.get("target_audience_mode", "-"))
-        self._set_meta(
-            str(project.get("name", "-")),
-            str(payload.get("version", "-")),
-            _STATUS_LABELS.get(status, status),
-            _AUDIENCE_LABELS.get(mode, mode),
-        )
-        active_version = baseline_service.repository().active_version(project_id)
-        self.status_hint.setText(
-            f"活跃版本：{active_version or '无'} · 加载 {datetime.now():%H:%M:%S}"
-        )
-        self._toggle_actions(payload)
-        self._build_sections(payload)
-
-    def _toggle_actions(self, payload: "dict | None") -> None:
+    def _toggle_actions(self, payload: "dict | None", active_version: "str | None") -> None:
         is_draft = bool(payload) and payload.get("status") == "draft"
         version = self._current_version()
-        active = baseline_service.repository().active_version(self._current_project() or "")
         self.publish_button.setEnabled(is_draft)
-        self.set_active_button.setEnabled(bool(version) and version != active)
+        self.set_active_button.setEnabled(bool(version) and version != active_version)
         self.new_draft_button.setEnabled(bool(payload))
         self.validate_button.setEnabled(bool(payload))
         self.open_json_button.setEnabled(bool(payload))
@@ -341,7 +353,7 @@ class BaselinePage(QWidget):
             QMessageBox.warning(self, "设置失败", str(exc))
             return
         self.projectChanged.emit()
-        self._reload_versions()
+        self._refresh(project_id, version)
 
     def _new_draft(self) -> None:
         project_id, version = self._current_project(), self._current_version()
@@ -354,10 +366,7 @@ class BaselinePage(QWidget):
         except BaselineError as exc:
             QMessageBox.warning(self, "新建草稿失败", str(exc))
             return
-        self._reload_versions()
-        idx = self.version_combo.findData(new_version)
-        if idx >= 0:
-            self.version_combo.setCurrentIndex(idx)
+        self._refresh(project_id, new_version)
         QMessageBox.information(
             self,
             "已新建草稿",
@@ -400,7 +409,7 @@ class BaselinePage(QWidget):
             QMessageBox.warning(self, "发布失败", str(exc))
             return
         self.projectChanged.emit()
-        self._reload_versions()
+        self._refresh(project_id, version)
         QMessageBox.information(self, "已发布", f"{version} 已发布并设为活跃版本。")
 
     def _open_json(self) -> None:
@@ -485,12 +494,7 @@ class BaselinePage(QWidget):
         # 若合并期间切到了别的项目，切回发起项目再刷新版本列表
         if self._current_project() != project_id:
             baseline_service.set_active_project(project_id)
-            self.reload()
-        else:
-            self._reload_versions()
-        idx = self.version_combo.findData(new_version)
-        if idx >= 0:
-            self.version_combo.setCurrentIndex(idx)
+        self._refresh(project_id, new_version)
         QMessageBox.information(
             self,
             "已生成合并草稿",

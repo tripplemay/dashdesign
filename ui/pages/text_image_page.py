@@ -6,9 +6,10 @@ only ever presents fields that matter for the selected mode.
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -48,6 +49,9 @@ def _mark_invalid(widget, invalid: bool) -> None:  # type: ignore[no-untyped-def
 
 
 class TextImagePage(QWidget):
+    # 后台解析当前基线完成后回主线程（跨线程 emit -> QueuedConnection）。
+    _activeBaselineReady = Signal(str, int)
+
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
         layout = scrollable_page_layout(self)
@@ -250,12 +254,31 @@ class TextImagePage(QWidget):
         layout.addWidget(paths)
 
         layout.addStretch(1)
+        self._active_seq = 0
+        self._activeBaselineReady.connect(self._apply_active_baseline)
         self.refresh_active_baseline()
         self.sync_text_image_mode()
 
     def refresh_active_baseline(self) -> None:
-        info = baseline_service.active_project_id()
-        self.baseline_label.setText(f"当前项目基线：{info or '（未选择）'} · {baseline_service.active_baseline_path()}")
+        """异步解析当前项目基线（走网络），避免切到本页时卡住 UI。"""
+        self._active_seq += 1
+        seq = self._active_seq
+        self.baseline_label.setText("当前项目基线：加载中…")
+
+        def worker() -> None:
+            try:
+                info = baseline_service.active_project_id() or "（未选择）"
+                path = str(baseline_service.active_baseline_path())
+                text = f"当前项目基线：{info} · {path}"
+            except Exception as exc:  # noqa: BLE001 — degrade to a message, never crash the page
+                text = f"当前项目基线：加载失败（{exc}）"
+            self._activeBaselineReady.emit(text, seq)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_active_baseline(self, text: str, seq: int) -> None:
+        if seq == self._active_seq:  # 只应用最新一次（避免旧结果覆盖新切换）
+            self.baseline_label.setText(text)
 
     def _append_scene_prompt(self, scene: ScenePrompt) -> None:
         """点击快捷模板：在已有内容后换行追加该场景的中文画面提示词。"""

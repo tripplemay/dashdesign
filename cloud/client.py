@@ -14,6 +14,7 @@ serves as the offline read fallback.
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -21,7 +22,7 @@ import requests
 
 from baseline import versioning
 from baseline.errors import BaselineError, GovernanceError, ValidationError
-from baseline.store import ProjectInfo, today_str
+from baseline.store import ProjectInfo, VersionSummary, today_str
 
 _DEFAULT_TIMEOUT = 30
 
@@ -87,7 +88,10 @@ class HttpBaselineRepository:
     def _write_cache(self, baseline_id: str, version: str, data: dict) -> Path:
         path = self._cache_path(baseline_id, version)
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".json.tmp")
+        # 唯一临时名：两个后台线程可能并发缓存同一版本（异步页面同时拉取时会发生），
+        # 固定临时名会互相踩到同一个 .tmp 上导致 FileNotFoundError 或写坏文件；各写
+        # 各的 tmp 后再原子 replace 即安全（内容相同，最后一个赢）。
+        tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
         return path
@@ -121,6 +125,16 @@ class HttpBaselineRepository:
         resp = self._get(f"/projects/{baseline_id}/versions")
         _raise_for_error(resp)
         return [str(item["version"]) for item in resp.json()]
+
+    def list_version_summaries(self, baseline_id: str) -> List[VersionSummary]:
+        # The server already returns {version, status} per version, so one GET
+        # yields every status — no need to download each version to read it.
+        resp = self._get(f"/projects/{baseline_id}/versions")
+        _raise_for_error(resp)
+        return [
+            VersionSummary(version=str(item["version"]), status=str(item.get("status", "draft")))
+            for item in resp.json()
+        ]
 
     def load_version(self, baseline_id: str, version: str) -> dict:
         resp = self._get(f"/projects/{baseline_id}/versions/{version}")

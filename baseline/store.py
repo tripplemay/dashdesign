@@ -65,6 +65,15 @@ class ProjectInfo:
     versions: List[str]
 
 
+@dataclass(frozen=True)
+class VersionSummary:
+    """A version plus its status — the minimum the version dropdown needs, so the
+    UI never has to download every version just to show a status label."""
+
+    version: str
+    status: str
+
+
 class BaselineRepository:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
@@ -133,6 +142,16 @@ class BaselineRepository:
         if not vdir.exists():
             return []
         return versioning.sort_versions([p.stem for p in vdir.glob("*.json")])
+
+    def list_version_summaries(self, baseline_id: str) -> List[VersionSummary]:
+        summaries: List[VersionSummary] = []
+        for version in self.list_versions(baseline_id):
+            try:
+                status = str(self.load_version(baseline_id, version).get("status", "draft"))
+            except (BaselineError, OSError, json.JSONDecodeError):
+                status = "draft"
+            summaries.append(VersionSummary(version=version, status=status))
+        return summaries
 
     def load_version(self, baseline_id: str, version: str) -> dict:
         path = self.version_path(baseline_id, version)
