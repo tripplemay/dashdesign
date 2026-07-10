@@ -7,11 +7,10 @@ GUI thread stays responsive.
 
 from __future__ import annotations
 
-import json
 import threading
-import urllib.request
 from typing import Callable
 
+import requests
 from PySide6.QtCore import QObject, Signal
 
 from app_runtime import APP_VERSION
@@ -23,6 +22,12 @@ from update_core import (
     download_to_temp,
 )
 
+# manifest 走 GitHub 的 releases/latest/download → 3 跳重定向到 release-assets，
+# GitHub 略慢时旧的 urllib 12s 超时就失败（下载用 30s 反而能成）。改用 app 里已
+# 稳定工作的 requests（自带 certifi、跟随重定向），放宽超时并重试几次。
+_MANIFEST_TIMEOUT = 20
+_MANIFEST_RETRIES = 3
+
 
 class UpdateSignals(QObject):
     result = Signal(dict, bool)
@@ -33,16 +38,20 @@ def fetch_update_manifest(manifest_url: str, signals: UpdateSignals, silent: boo
     """Fetch the manifest on a daemon thread and emit the outcome via signals."""
 
     def worker() -> None:
-        try:
-            request = urllib.request.Request(
-                manifest_url,
-                headers={"User-Agent": f"DashDesign/{APP_VERSION}"},
-            )
-            with urllib.request.urlopen(request, timeout=12) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            signals.result.emit(payload, silent)
-        except Exception as exc:  # noqa: BLE001
-            signals.error.emit(str(exc), silent)
+        last_exc: "Exception | None" = None
+        for _ in range(_MANIFEST_RETRIES):
+            try:
+                resp = requests.get(
+                    manifest_url,
+                    headers={"User-Agent": f"DashDesign/{APP_VERSION}"},
+                    timeout=_MANIFEST_TIMEOUT,
+                )
+                resp.raise_for_status()
+                signals.result.emit(resp.json(), silent)
+                return
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+        signals.error.emit(str(last_exc), silent)
 
     threading.Thread(target=worker, daemon=True).start()
 

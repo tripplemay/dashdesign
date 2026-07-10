@@ -48,60 +48,27 @@ def is_installed_build(directory: Optional[Path] = None) -> bool:
 
 
 def launch_windows_installer(setup_exe: Path) -> bool:
-    """Start the downloaded Inno Setup installer elevated; return True once it is
-    actually running.
+    """Open the downloaded Inno Setup installer elevated; return True on success.
 
     The installer targets Program Files, so its manifest requests
-    ``requireAdministrator``:
+    ``requireAdministrator``. ``ShellExecute`` (via ``os.startfile`` with the
+    ``runas`` verb) honours that, raising the UAC prompt and launching it
+    elevated. ``QProcess``/``CreateProcess`` cannot elevate at all (the
+    v0.3.0/v0.3.1 bug), so it must not be used here.
 
-    - ``QProcess``/``CreateProcess`` cannot elevate (ERROR_ELEVATION_REQUIRED) —
-      the bug v0.3.0/v0.3.1 shipped.
-    - ``os.startfile`` (plain ``ShellExecuteW``) elevates, but returns as soon as
-      the request is *handed off*, asynchronously. The caller then quits ~300ms
-      later, and Windows aborts the still-pending elevation — the installer
-      never appears, with no error. That was the v0.3.2–v0.4.0 bug: "downloads
-      but never launches".
-
-    The fix is ``ShellExecuteExW`` with ``SEE_MASK_NOASYNC``, which Microsoft
-    documents as required when the calling thread exits soon after: it blocks
-    until the elevated process is created (i.e. past the UAC prompt), so quitting
-    afterwards is safe. Returns False if the launch fails or the user declines
-    UAC, so the caller can show the manual-run fallback.
+    CRITICAL — the caller MUST NOT force-quit right after. ``os.startfile``
+    initiates the elevation *asynchronously*; if the app exits before the user
+    consents to UAC, Windows aborts the pending elevation and the installer
+    never appears, with no error ("downloads but never installs" — v0.3.2–v0.4.2,
+    including the fragile hand-rolled ShellExecuteEx attempt). Instead the app
+    stays alive; the new setup.exe's CloseApplications/RestartApplications close
+    and relaunch it during the file-copy phase.
     """
-    import ctypes
-    from ctypes import wintypes
+    import os
 
-    class _ShellExecuteInfoW(ctypes.Structure):
-        _fields_ = [
-            ("cbSize", wintypes.DWORD),
-            ("fMask", wintypes.ULONG),
-            ("hwnd", wintypes.HWND),
-            ("lpVerb", wintypes.LPCWSTR),
-            ("lpFile", wintypes.LPCWSTR),
-            ("lpParameters", wintypes.LPCWSTR),
-            ("lpDirectory", wintypes.LPCWSTR),
-            ("nShow", ctypes.c_int),
-            ("hInstApp", wintypes.HINSTANCE),
-            ("lpIDList", ctypes.c_void_p),
-            ("lpClass", wintypes.LPCWSTR),
-            ("hkeyClass", wintypes.HKEY),
-            ("dwHotKey", wintypes.DWORD),
-            ("hIconOrMonitor", wintypes.HANDLE),
-            ("hProcess", wintypes.HANDLE),
-        ]
-
-    SEE_MASK_NOCLOSEPROCESS = 0x00000040
-    SEE_MASK_NOASYNC = 0x00000100  # 关键：调用后即退出进程时必须设，否则提权会被中止
-    SW_SHOWNORMAL = 1
-
-    shell32 = ctypes.windll.shell32
-    shell32.ShellExecuteExW.argtypes = [ctypes.POINTER(_ShellExecuteInfoW)]
-    shell32.ShellExecuteExW.restype = wintypes.BOOL
-
-    info = _ShellExecuteInfoW()
-    info.cbSize = ctypes.sizeof(info)
-    info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC
-    info.lpVerb = "runas"  # 显式请求提权，弹 UAC 并以管理员启动
-    info.lpFile = str(Path(setup_exe))
-    info.nShow = SW_SHOWNORMAL
-    return bool(shell32.ShellExecuteExW(ctypes.byref(info)))
+    try:
+        os.startfile(str(Path(setup_exe)), "runas")  # noqa: S606 — ShellExecute runas → UAC
+    except OSError:
+        # Raised on a failed or user-declined launch (e.g. UAC cancelled).
+        return False
+    return True

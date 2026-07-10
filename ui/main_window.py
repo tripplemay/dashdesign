@@ -877,8 +877,15 @@ class DashDesignQtApp(QMainWindow):
                 f"更新已下载到：\n{path}\n\n请手动运行该安装程序完成更新。",
             )
             return
-        self.banner.show_message("info", "已下载新版本，正在启动安装程序…", timeout_ms=3000)
-        QTimer.singleShot(300, QApplication.quit)
+        # 不主动退出：os.startfile 异步提权，过早 quit 会中止安装器启动（v0.3.2~v0.4.2
+        # 的病根）。保持运行，由新安装器的 CloseApplications 在拷贝文件时自动关闭本程序、
+        # 装完再重启。用非阻塞 banner 告知，避免模态框挡住安装器的关闭请求。
+        self.banner.show_message(
+            "info",
+            "更新已下载，安装程序正在打开。请在向导中完成安装——"
+            "安装时本程序会自动关闭，完成后可重新打开。",
+            timeout_ms=0,
+        )
 
     def _on_update_error(self, message: str) -> None:
         self._close_update_dialog()
