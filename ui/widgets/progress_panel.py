@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import List
 
 import qtawesome as qta
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
@@ -63,7 +63,12 @@ class _StageRow(QWidget):
             SKIP: colors["subtitle_fg"],
             FAIL: colors["error_fg"],
         }.get(status, colors["subtitle_fg"])
-        self.icon.setPixmap(qta.icon(_STATUS_ICON.get(status, _STATUS_ICON[PENDING]), color=color).pixmap(18, 18))
+        # 传 devicePixelRatio：固定物理像素的 pixmap 在 HiDPI 屏上会偏小发虚。
+        self.icon.setPixmap(
+            qta.icon(_STATUS_ICON.get(status, _STATUS_ICON[PENDING]), color=color).pixmap(
+                QSize(18, 18), self.devicePixelRatioF()
+            )
+        )
         weight = "600" if status == RUNNING else "400"
         self.text.setStyleSheet(f"color: {color}; font-weight: {weight};")
 

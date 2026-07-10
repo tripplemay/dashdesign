@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QSize, QTimer
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
 import qtawesome as qta
@@ -72,7 +72,10 @@ class InfoBanner(QWidget):
 
         tokens = theme.current_tokens()
         color = tokens.get(f"{kind}_fg", tokens["subtitle_fg"])
-        self._icon_label.setPixmap(qta.icon(_KIND_ICONS[kind], color=color).pixmap(18, 18))
+        # 传入 devicePixelRatio：固定 18px 物理像素的 pixmap 在 HiDPI 屏上会发虚。
+        self._icon_label.setPixmap(
+            qta.icon(_KIND_ICONS[kind], color=color).pixmap(QSize(18, 18), self.devicePixelRatioF())
+        )
         self._text_label.setText(text)
 
         self._action_callback = action_callback

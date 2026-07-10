@@ -122,25 +122,31 @@ class TextImagePage(QWidget):
         self.t2i_purpose_template.addItem("免费试听/体验课", "trial_class")
         self.t2i_purpose_template.addItem("AI能力测评预约", "ability_assessment")
         self.t2i_purpose_template.addItem("课程体系介绍", "course_system")
-        self.t2i_purpose_template.setMinimumWidth(150)
         self.t2i_style_template = QComboBox()
         self.t2i_style_template.addItem("科技霓虹", "tech_neon")
         self.t2i_style_template.addItem("明亮少儿教育", "bright_edu")
         self.t2i_style_template.addItem("梦幻AI绘图", "fantasy_ai_art")
         self.t2i_style_template.addItem("高端简洁", "premium_minimal")
         self.t2i_style_template.addItem("漫画热血", "comic_pop")
-        self.t2i_style_template.setMinimumWidth(150)
         self.t2i_layout_template = QComboBox()
         self.t2i_layout_template.addItem("顶部标题+模块+CTA", "headline_modules_cta")
         self.t2i_layout_template.addItem("中心主体+环绕模块", "central_subject_orbit_modules")
         self.t2i_layout_template.addItem("竖版展架信息流", "portrait_exhibition")
         self.t2i_layout_template.addItem("方版社媒主视觉", "square_social")
-        self.t2i_layout_template.setMinimumWidth(160)
         self.t2i_text_density = QComboBox()
         self.t2i_text_density.addItem("中文字", "medium")
         self.t2i_text_density.addItem("低文字", "low")
         self.t2i_text_density.addItem("高文字", "high")
-        self.t2i_text_density.setMinimumWidth(100)
+        # 模板下拉不设硬编码最小宽：窄窗口（表单区被预览挤压）时允许收缩，
+        # 避免同行两个 150px 下拉把内容区撑出横向滚动条。
+        for combo in (
+            self.t2i_purpose_template,
+            self.t2i_style_template,
+            self.t2i_layout_template,
+            self.t2i_text_density,
+        ):
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(6)
 
         template_row = QHBoxLayout()
         template_row.setSpacing(8)
@@ -212,14 +218,12 @@ class TextImagePage(QWidget):
         model_row.setSpacing(8)
         self.t2i_image_size = QComboBox()
         self.t2i_image_size.addItems(["auto", "1536x1024", "1024x1536", "1536x1536", "1024x1024"])
-        self.t2i_image_size.setMinimumWidth(130)
         self.t2i_image_size.setToolTip(
             "模型生成的母版像素（auto 会按印刷宽高比自动选择）。\n"
             "母版之后会被放大到印刷像素，比例不符时用模糊扩边补齐。"
         )
         self.t2i_quality = QComboBox()
         self.t2i_quality.addItems(["high", "medium", "low", "auto"])
-        self.t2i_quality.setMinimumWidth(110)
         model_row.addWidget(QLabel("模型尺寸"))
         model_row.addWidget(self.t2i_image_size)
         model_row.addSpacing(12)

@@ -48,7 +48,17 @@ class FlowLayout(QLayout):
         self._do_layout(rect, apply_geometry=True)
 
     def sizeHint(self) -> QSize:  # noqa: N802
-        return self.minimumSize()
+        # 报告"所有条目单行排开"的自然尺寸——只报最宽单项会让容器在需要
+        # 折行时低估高度，裁掉末行。实际高度仍由 heightForWidth 按宽度决定。
+        width = sum(item.sizeHint().width() for item in self._items)
+        if self._items:
+            width += self._spacing * (len(self._items) - 1)
+        height = max((item.sizeHint().height() for item in self._items), default=0)
+        margins = self.contentsMargins()
+        return QSize(
+            width + margins.left() + margins.right(),
+            height + margins.top() + margins.bottom(),
+        )
 
     def minimumSize(self) -> QSize:  # noqa: N802
         size = QSize()

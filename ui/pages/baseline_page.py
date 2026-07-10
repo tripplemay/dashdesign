@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QMessageBox,
     QProgressDialog,
@@ -104,8 +103,9 @@ class BaselinePage(QWidget):
         layout.addWidget(meta)
 
         # -- 操作 ------------------------------------------------------
-        actions = QHBoxLayout()
-        actions.setSpacing(6)
+        # 7 个按钮用 FlowLayout：窗口窄时自动换行，而不是把中文按钮压成省略号。
+        actions_container = QWidget()
+        actions = FlowLayout(actions_container, margin=0, spacing=6)
         self.set_active_button = QPushButton("设为活跃")
         self.set_active_button.setToolTip("把选中的版本设为该项目出图时使用的活跃版本")
         self.set_active_button.clicked.connect(self._set_active)
@@ -135,11 +135,11 @@ class BaselinePage(QWidget):
         ):
             btn.setMinimumWidth(0)
             actions.addWidget(btn)
-        actions.addStretch(1)
+        layout.addWidget(actions_container)
         self.status_hint = QLabel("")
         self.status_hint.setObjectName("Subtitle")
-        actions.addWidget(self.status_hint)
-        layout.addLayout(actions)
+        self.status_hint.setWordWrap(True)
+        layout.addWidget(self.status_hint)
 
         # -- 只读结构化预览 --------------------------------------------
         scroll = QScrollArea()

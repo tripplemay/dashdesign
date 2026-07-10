@@ -216,6 +216,7 @@ class DashDesignQtApp(QMainWindow):
         self.title_label.setObjectName("Title")
         self.subtitle_label = QLabel("将根目录或指定目录中的图片输出为印刷规格。")
         self.subtitle_label.setObjectName("Subtitle")
+        self.subtitle_label.setWordWrap(True)  # 长副标题在窄窗口换行而不是撑宽 header
         title_block.addWidget(self.title_label)
         title_block.addWidget(self.subtitle_label)
         header.addLayout(title_block, 1)

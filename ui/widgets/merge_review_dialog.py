@@ -39,7 +39,12 @@ class MergeReviewDialog(QDialog):
         super().__init__(parent)
         self.report = report
         self.setWindowTitle("文档合并审校")
-        self.resize(920, 560)
+        screen = self.screen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            self.resize(min(920, avail.width() - 80), min(560, avail.height() - 80))
+        else:
+            self.resize(920, 560)
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
