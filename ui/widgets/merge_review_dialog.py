@@ -7,6 +7,8 @@ and color-highlighted; nothing is auto-published. Approving builds a new draft.
 
 from __future__ import annotations
 
+import re
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -105,7 +107,19 @@ class MergeReviewDialog(QDialog):
         self.accept()
 
 
+_RGBA_RE = re.compile(
+    r"rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)"
+)
+
+
 def _qcolor(value: str):
+    """Token 值转 QColor。暗色 token 用 CSS ``rgba(r, g, b, a)`` 字符串——QColor
+    不解析该格式（会得到无效色，暗色模式下高亮行退化成黑/透明），需手动拆。"""
     from PySide6.QtGui import QColor
 
+    match = _RGBA_RE.fullmatch(str(value).strip())
+    if match:
+        r, g, b = (int(float(match.group(i))) for i in (1, 2, 3))
+        alpha = float(match.group(4)) if match.group(4) is not None else 1.0
+        return QColor(r, g, b, max(0, min(255, round(alpha * 255))))
     return QColor(value)

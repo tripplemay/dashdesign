@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -19,11 +20,12 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
-from ui import cloud_bootstrap, theme
+from ui import api_config, cloud_bootstrap, theme
 
 _THEME_MODES = (("system", "跟随系统"), ("light", "浅色"), ("dark", "深色"))
 
@@ -36,8 +38,25 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        layout.addWidget(self._build_appearance_group())
-        layout.addWidget(self._build_admin_cloud_group())
+        # 内容放滚动区、按钮固定底部：管理员展开云端配置后条目很多，小屏
+        # （768 高）上否则 Save/Cancel 会被挤出屏幕外无法点击。
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(12)
+        content_layout.addWidget(self._build_appearance_group())
+        if not cloud_bootstrap.is_configured():
+            # 非云端（dev / 自托管）才显示本机 API 配置；云端模式下密钥由
+            # 管理员统一下发，普通用户无需也不该在本机各填一份。
+            content_layout.addWidget(self._build_local_api_group())
+        content_layout.addWidget(self._build_admin_cloud_group())
+        content_layout.addStretch(1)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -47,6 +66,11 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self._on_cancel)
         layout.addWidget(buttons)
+
+        screen = self.screen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            self.resize(min(600, avail.width() - 80), min(620, avail.height() - 80))
 
     # -- appearance (everyone) -----------------------------------------
     def _build_appearance_group(self) -> QGroupBox:
@@ -68,6 +92,45 @@ class SettingsDialog(QDialog):
         manager = theme.manager()
         if manager is not None:
             manager.set_mode(mode)
+
+    # -- local API override (dev / self-hosted, no cloud) ----------------
+    def _build_local_api_group(self) -> QGroupBox:
+        group = QGroupBox("图像 API（本机）")
+        grid = QGridLayout(group)
+        hint = QLabel("本机未接入云端配置，请在此填写图像 API 端点与密钥。")
+        hint.setObjectName("Subtitle")
+        hint.setWordWrap(True)
+        grid.addWidget(hint, 0, 0, 1, 2)
+        self.local_api_base = QLineEdit(api_config.load_base_url())
+        self.local_api_base.setPlaceholderText("如 https://api.example.com/v1")
+        self.local_api_key = QLineEdit(api_config.load_api_key())
+        self.local_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.local_api_key.setPlaceholderText("API Key")
+        self.local_model = QLineEdit(api_config.load_baseline_model())
+        self.local_model.setPlaceholderText("文档合并模型，如 gpt-4o")
+        save_btn = QPushButton("保存本机配置")
+        save_btn.clicked.connect(self._save_local_api)
+        grid.addWidget(QLabel("API 端点"), 1, 0)
+        grid.addWidget(self.local_api_base, 1, 1)
+        grid.addWidget(QLabel("API Key"), 2, 0)
+        grid.addWidget(self.local_api_key, 2, 1)
+        grid.addWidget(QLabel("文本模型"), 3, 0)
+        grid.addWidget(self.local_model, 3, 1)
+        grid.addWidget(save_btn, 4, 1)
+        grid.setColumnStretch(1, 1)
+        self.local_api_status = QLabel("")
+        self.local_api_status.setObjectName("Subtitle")
+        grid.addWidget(self.local_api_status, 5, 0, 1, 2)
+        return group
+
+    def _save_local_api(self) -> None:
+        base_url = self.local_api_base.text().strip()
+        api_key = self.local_api_key.text().strip()
+        if not base_url or not api_key:
+            self.local_api_status.setText("API 端点与 Key 都不能为空。")
+            return
+        api_config.save(base_url, api_key, self.local_model.text().strip())
+        self.local_api_status.setText("已保存到本机，立即生效。")
 
     # -- cloud config (admin only) -------------------------------------
     def _build_admin_cloud_group(self) -> QGroupBox:

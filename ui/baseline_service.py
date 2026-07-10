@@ -93,7 +93,12 @@ def _stored_active_project() -> str:
 
 @dataclass(frozen=True)
 class BaselineOverview:
-    """Everything the baseline page renders on load, fetched in the fewest calls."""
+    """Everything the baseline page renders on load, fetched in the fewest calls.
+
+    ``active_project_id`` is the project being *browsed* (the page's selection);
+    ``global_active_project`` is the one workflows actually use — the two differ
+    while the user is only looking around.
+    """
 
     projects: List[ProjectInfo]
     active_project_id: Optional[str]
@@ -101,6 +106,7 @@ class BaselineOverview:
     active_version: Optional[str]
     selected_version: Optional[str]
     selected_payload: Optional[Dict[str, Any]]
+    global_active_project: Optional[str] = None
 
 
 def _resolve_active_pid(ids: List[str], selected: Optional[str], stored: str) -> Optional[str]:
@@ -148,6 +154,7 @@ def load_overview(
         active_version=active_version,
         selected_version=selected,
         selected_payload=payload,
+        global_active_project=_resolve_active_pid(ids, None, _stored_active_project()),
     )
 
 

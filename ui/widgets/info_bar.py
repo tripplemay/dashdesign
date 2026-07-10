@@ -48,7 +48,12 @@ class InfoBanner(QWidget):
         self._timer.timeout.connect(self.dismiss)
         self._action_callback = None
         self._action_button.clicked.connect(self._run_action)
+        self._kind = ""
         self.hide()
+
+    def kind(self) -> str:
+        """The kind of the currently shown banner, or "" when hidden."""
+        return self._kind
 
     def show_message(
         self,
@@ -60,6 +65,7 @@ class InfoBanner(QWidget):
     ) -> None:
         if kind not in _KIND_ICONS:
             kind = "info"
+        self._kind = kind
         self.setProperty("kind", kind)
         self.style().unpolish(self)
         self.style().polish(self)
@@ -83,6 +89,7 @@ class InfoBanner(QWidget):
 
     def dismiss(self) -> None:
         self._timer.stop()
+        self._kind = ""
         self.hide()
 
     def _run_action(self) -> None:

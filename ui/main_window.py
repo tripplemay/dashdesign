@@ -69,8 +69,15 @@ class DashDesignQtApp(QMainWindow):
         # baseline endpoint) in the background so ordinary users set nothing.
         cloud_bootstrap.bootstrap_async()
         self.setWindowTitle("DashDesign 印刷图片工作流")
-        self.resize(1180, 780)
-        self.setMinimumSize(980, 680)
+        # 最小高度须容得下 1080p@150%（逻辑 720，扣任务栏/标题栏约剩 650）与
+        # 1366x768 笔记本；初始尺寸按屏幕可用区域钳制，避免首启即超出屏幕。
+        self.setMinimumSize(960, 560)
+        screen = self.screen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            self.resize(min(1180, available.width() - 40), min(780, available.height() - 60))
+        else:
+            self.resize(1180, 780)
         self.process: "QProcess | None" = None
         self.last_output_dir: "Path | None" = None
         self.current_preview_path: "Path | None" = None
@@ -253,6 +260,9 @@ class DashDesignQtApp(QMainWindow):
         self.main_splitter.addWidget(self.stack)
         self.main_splitter.addWidget(self._make_preview_panel())
         self.main_splitter.setSizes([620, 420])
+        # 禁止把表单页/预览面板拖到 0 宽——塌陷状态会被 saveState 持久化，
+        # 下次启动看起来像"界面坏了"。
+        self.main_splitter.setChildrenCollapsible(False)
         work_layout.addWidget(self.main_splitter, 1)
 
         self.progress_panel = ProgressPanel()
@@ -374,10 +384,12 @@ class DashDesignQtApp(QMainWindow):
             self.text_image_page.refresh_active_baseline()
         # 进度与提示都属于"上一次运行/上一个页面"，切换页面时清掉，
         # 避免在新工作流页面残留其他工作流的进度或提示。运行中不清（进度仍在进行）。
+        # 例外：失败提示保留——用户常需切页排查（看设置/导日志），回来时错误信息不能消失。
         if not self._running:
             self.progress_panel.hide()
-            self.banner.dismiss()
-            self.statusBar().showMessage("就绪")
+            if self.banner.kind() != "error":
+                self.banner.dismiss()
+                self.statusBar().showMessage("就绪")
         self._update_run_controls()
         self.preview_input()
 
@@ -853,6 +865,12 @@ class DashDesignQtApp(QMainWindow):
         state = settings.value("window/main_splitter")
         if state is not None:
             self.main_splitter.restoreState(state)
+            # restoreState 会连旧状态里的可折叠标志一起恢复，须重新禁掉；
+            # 旧版本可能已把某侧持久化成 0 宽，一并展开修复。
+            self.main_splitter.setChildrenCollapsible(False)
+            sizes = self.main_splitter.sizes()
+            if len(sizes) == 2 and (sizes[0] == 0 or sizes[1] == 0):
+                self.main_splitter.setSizes([620, 420])
         last_output = str(settings.value("window/last_output_dir", ""))
         if last_output and Path(last_output).exists():
             self.last_output_dir = Path(last_output)

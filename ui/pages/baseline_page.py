@@ -71,11 +71,15 @@ class BaselinePage(QWidget):
         self.new_project_button = QPushButton("新建项目…")
         self.new_project_button.setToolTip("从内置模板/复制现有项目/导入 JSON 新建一个项目基线")
         self.new_project_button.clicked.connect(self._new_project)
+        self.use_project_button = QPushButton("设为当前项目")
+        self.use_project_button.setToolTip("文生图等工作流将改用该项目的活跃基线；仅浏览无需此操作")
+        self.use_project_button.clicked.connect(self._use_project)
         sel_grid.addWidget(QLabel("项目"), 0, 0)
         sel_grid.addWidget(self.project_combo, 0, 1)
         sel_grid.addWidget(QLabel("版本"), 0, 2)
         sel_grid.addWidget(self.version_combo, 0, 3)
-        sel_grid.addWidget(self.new_project_button, 0, 4)
+        sel_grid.addWidget(self.use_project_button, 0, 4)
+        sel_grid.addWidget(self.new_project_button, 0, 5)
         sel_grid.setColumnStretch(1, 1)
         sel_grid.setColumnStretch(3, 1)
         layout.addWidget(selector)
@@ -150,6 +154,7 @@ class BaselinePage(QWidget):
 
         # 异步加载：切换/刷新时后台拉 overview，seq 保证只应用最新一次结果。
         self._overview_seq = 0
+        self._global_active_project: "str | None" = None
         self._overviewReady.connect(self._apply_overview)
         self._overviewFailed.connect(self._on_overview_failed)
         baseline_service.repository()  # 主线程预热单例，避免多后台线程首次并发初始化
@@ -187,11 +192,13 @@ class BaselinePage(QWidget):
     def _apply_overview(self, overview: "baseline_service.BaselineOverview", seq: int) -> None:
         if seq != self._overview_seq:
             return  # 过期结果（用户已再次切换），丢弃
+        self._global_active_project = overview.global_active_project
         self.project_combo.blockSignals(True)
         self.version_combo.blockSignals(True)
         self.project_combo.clear()
         for info in overview.projects:
-            self.project_combo.addItem(f"{info.name}（{info.baseline_id}）", info.baseline_id)
+            marker = " · 当前" if info.baseline_id == overview.global_active_project else ""
+            self.project_combo.addItem(f"{info.name}（{info.baseline_id}）{marker}", info.baseline_id)
         if overview.active_project_id:
             idx = self.project_combo.findData(overview.active_project_id)
             if idx >= 0:
@@ -263,8 +270,8 @@ class BaselinePage(QWidget):
     def _start_generate_project(self, req: dict) -> None:
         if not api_config.has_api_key():
             if QMessageBox.question(
-                self, "尚未配置 API",
-                "从文档生成基线需要调用 API，但尚未配置 API Key。是否现在去“设置”填写？",
+                self, "API 尚未就绪",
+                f"从文档生成基线需要调用 API。{api_config.missing_key_message()}\n\n是否打开“设置”查看？",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             ) == QMessageBox.StandardButton.Yes:
@@ -323,21 +330,38 @@ class BaselinePage(QWidget):
         )
 
     def _on_project_changed(self) -> None:
-        project_id = self._current_project()
-        if project_id:
-            baseline_service.set_active_project(project_id)
-            self.projectChanged.emit()
-        self._refresh(selected_project=project_id)
+        # 下拉切换只是"浏览查看"，不改工作流实际使用的当前项目——
+        # 生效需显式点"设为当前项目"（选择 ≠ 生效）。
+        self._refresh(selected_project=self._current_project())
 
     def _on_version_changed(self) -> None:
         self._refresh(self._current_project(), self._current_version())
+
+    def _use_project(self) -> None:
+        project_id = self._current_project()
+        if not project_id or project_id == self._global_active_project:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "设为当前项目",
+            f"将「{project_id}」设为当前项目？\n文生图等工作流将改用该项目的活跃基线。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        baseline_service.set_active_project(project_id)
+        self.projectChanged.emit()
+        self._refresh(project_id, self._current_version())
 
     # -- rendering -----------------------------------------------------
     def _toggle_actions(self, payload: "dict | None", active_version: "str | None") -> None:
         is_draft = bool(payload) and payload.get("status") == "draft"
         version = self._current_version()
+        project = self._current_project()
         self.publish_button.setEnabled(is_draft)
         self.set_active_button.setEnabled(bool(version) and version != active_version)
+        self.use_project_button.setEnabled(bool(project) and project != self._global_active_project)
         self.new_draft_button.setEnabled(bool(payload))
         self.validate_button.setEnabled(bool(payload))
         self.open_json_button.setEnabled(bool(payload))
@@ -346,6 +370,16 @@ class BaselinePage(QWidget):
     def _set_active(self) -> None:
         project_id, version = self._current_project(), self._current_version()
         if not project_id or not version:
+            return
+        # 与"发布"一致：改变出图行为的状态操作需确认，避免误点静默生效。
+        confirm = QMessageBox.question(
+            self,
+            "设为活跃版本",
+            f"把 {version} 设为项目「{project_id}」出图使用的活跃版本？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
             return
         try:
             baseline_service.repository().set_active_version(project_id, version)
@@ -425,8 +459,8 @@ class BaselinePage(QWidget):
         if not api_config.has_api_key():
             reply = QMessageBox.question(
                 self,
-                "尚未配置 API",
-                "文档分析需要调用图像/文本 API，但尚未配置 API Key。是否现在去“设置”填写？",
+                "API 尚未就绪",
+                f"文档分析需要调用文本 API。{api_config.missing_key_message()}\n\n是否打开“设置”查看？",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             )

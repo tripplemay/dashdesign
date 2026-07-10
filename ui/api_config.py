@@ -57,3 +57,18 @@ def save(base_url: str, api_key: str, baseline_model: str = "") -> None:
 def has_api_key() -> bool:
     """A key is available from the cloud config, a local override, or the env."""
     return bool(load_api_key() or os.environ.get("OPENAI_API_KEY", "").strip())
+
+
+def missing_key_message() -> str:
+    """User-facing explanation for a missing API key, matched to the deployment.
+
+    Cloud-wired builds fetch the key automatically — telling ordinary users to
+    "fill it in Settings" sends them to an admin-locked section they cannot
+    edit. Only self-hosted / dev runs actually have an editable local field.
+    """
+    if cloud_bootstrap.is_configured():
+        return (
+            "图像 API 配置尚未从云端获取到（可能网络不通或管理员还未配置）。"
+            "请检查网络后重启应用；若持续失败请联系管理员。"
+        )
+    return "尚未配置 API Key，无法调用图像 API。请先在“文件 → 设置”的“图像 API（本机）”中填写。"
