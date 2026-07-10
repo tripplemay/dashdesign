@@ -8,7 +8,6 @@ append-only versioning are enforced in one place.
 from __future__ import annotations
 
 import threading
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -118,18 +117,19 @@ class BaselinePage(QWidget):
         self.set_active_button.setObjectName("SecondaryButton")
         self.set_active_button.clicked.connect(self._set_active)
         self.new_draft_button = QPushButton("新建草稿")
-        self.new_draft_button.setToolTip("从当前选中版本派生一个新草稿（追加式，链 parent_version）")
+        self.new_draft_button.setToolTip("以当前选中版本为底稿生成一个可编辑的新草稿，原版本保持不变")
         self.new_draft_button.clicked.connect(self._new_draft)
         self.validate_button = QPushButton("校验")
         self.validate_button.clicked.connect(self._validate)
-        self.merge_button = QPushButton("上传文档合并")
-        self.merge_button.setToolTip("上传新的项目介绍/背景文档，自动分析并把新信息合并为一个新草稿（需人工审校）")
+        self.merge_button = QPushButton("用文档补充内容")
+        self.merge_button.setToolTip("上传项目介绍/背景文档，自动提取新信息，生成一个待人工审校的新草稿")
         self.merge_button.clicked.connect(self._upload_and_merge)
         self.publish_button = QPushButton("发布")
         self.publish_button.setToolTip("把草稿发布为不可变版本并设为活跃（需通过结构校验与治理检查）")
         self.publish_button.setObjectName("DangerButton")  # 不可逆操作，视觉上警示
         self.publish_button.clicked.connect(self._publish)
-        self.open_json_button = QPushButton("打开 JSON")
+        self.open_json_button = QPushButton("打开源文件")
+        self.open_json_button.setToolTip("在系统中打开该版本的底层 JSON 数据文件（高级功能）")
         self.open_json_button.clicked.connect(self._open_json)
         self.reload_button = QPushButton("刷新")
         self.reload_button.clicked.connect(self.reload)
@@ -282,9 +282,7 @@ class BaselinePage(QWidget):
             _STATUS_LABELS.get(status, status),
             _AUDIENCE_LABELS.get(mode, mode),
         )
-        self.status_hint.setText(
-            f"活跃版本：{overview.active_version or '无'} · 加载 {datetime.now():%H:%M:%S}"
-        )
+        self.status_hint.setText(f"活跃版本：{overview.active_version or '无'}")
         self._toggle_actions(payload, overview.active_version)
         self._build_sections(payload)
 
@@ -302,7 +300,7 @@ class BaselinePage(QWidget):
         self._notify(
             "success",
             f"项目「{dialog.created_id}」已创建为草稿并设为活跃，"
-            "可通过“上传文档合并”补充内容，校验通过后发布。",
+            "可通过“用文档补充内容”完善信息，校验通过后发布。",
         )
 
     # -- 从文档生成新项目（异步）--------------------------------------
@@ -442,7 +440,7 @@ class BaselinePage(QWidget):
         self._refresh(project_id, new_version)
         self._notify(
             "success",
-            f"已从 {version} 新建草稿 {new_version}，可用文档合并功能补充内容，校验通过后发布。",
+            f"已从 {version} 新建草稿 {new_version}，可用“用文档补充内容”完善信息，校验通过后发布。",
         )
 
     def _validate(self) -> None:
@@ -459,7 +457,7 @@ class BaselinePage(QWidget):
         if errors:
             lines.append("结构校验错误：\n- " + "\n- ".join(errors[:20]))
         if gov:
-            lines.append("治理问题：\n- " + "\n- ".join(gov))
+            lines.append("内容合规提醒：\n- " + "\n- ".join(gov))
         QMessageBox.warning(self, "校验未通过", "\n\n".join(lines))
 
     def _publish(self) -> None:

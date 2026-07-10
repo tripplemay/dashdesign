@@ -48,10 +48,11 @@ class NewProjectDialog(QDialog):
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("例如：少儿编程创作课程")
         self.id_edit = QLineEdit()
-        self.id_edit.setPlaceholderText("小写字母/数字/-/_，3-81 字符，如 kids_coding_course")
+        self.id_edit.setPlaceholderText("如 kids-coding（小写英文/数字，内部编号）")
+        self.id_edit.setToolTip("项目的内部编号，用于存储与同步；小写字母/数字/-/_，3-81 字符。大写会自动转换。")
         form.addWidget(QLabel("项目名称"), 0, 0)
         form.addWidget(self.name_edit, 0, 1)
-        form.addWidget(QLabel("项目标识"), 1, 0)
+        form.addWidget(QLabel("项目编号"), 1, 0)
         form.addWidget(self.id_edit, 1, 1)
         form.setColumnStretch(1, 1)
         layout.addLayout(form)
@@ -144,7 +145,7 @@ class NewProjectDialog(QDialog):
             QMessageBox.warning(self, "缺少项目名称", "请填写项目名称。")
             return
         if not raw_id:
-            QMessageBox.warning(self, "缺少项目标识", "请填写项目标识（baseline_id）。")
+            QMessageBox.warning(self, "缺少项目编号", "请填写项目编号（如 kids-coding）。")
             return
         # 前置规范化 + 校验：把输入统一成可存储的小写 slug（DASHaicourse ->
         # dashaicourse），并在调用 LLM/创建之前拦截非法值，避免“从文档生成”白等。
@@ -152,9 +153,9 @@ class NewProjectDialog(QDialog):
         if not is_valid_baseline_id(baseline_id):
             QMessageBox.warning(
                 self,
-                "项目标识不合法",
-                "项目标识只能包含小写字母、数字、连字符 - 和下划线 _，长度 3–81 字符，"
-                "且首字符为字母或数字。\n请改用例如 dashaicourse 或 kids_coding_course 这样的标识。",
+                "项目编号不可用",
+                "项目编号只能包含小写字母、数字、连字符 - 和下划线 _，长度 3–81 字符，"
+                "且首字符为字母或数字。\n请改用例如 dashaicourse 或 kids_coding_course 这样的编号。",
             )
             return
         # 前置重名检查：唯一性最终由 create_project 兜底，但提前拦下常见重名，避免
@@ -163,8 +164,8 @@ class NewProjectDialog(QDialog):
         if any(info.baseline_id == baseline_id for info in baseline_service.projects()):
             QMessageBox.warning(
                 self,
-                "项目标识已存在",
-                f"已存在项目标识「{baseline_id}」，请换一个唯一的标识。",
+                "项目编号已存在",
+                f"已存在项目编号「{baseline_id}」，请换一个唯一的编号。",
             )
             return
         if self.generate_radio.isChecked():

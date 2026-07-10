@@ -50,9 +50,10 @@ class QrPage(QWidget):
         self.qr_box = QLineEdit()
         self.qr_box.setPlaceholderText("x1,y1,x2,y2（原图像素坐标）")
         self.qr_reference_size = QLineEdit()
-        self.qr_reference_size.setPlaceholderText("可选：坐标参考的图片尺寸，如 3238x1295")
+        self.qr_reference_size.setPlaceholderText("可选：框选时自动填写，通常无需修改")
         self.qr_reference_size.setToolTip(
-            "当坐标来自另一张分辨率不同的参考图时填写；脚本会按比例换算到实际图片。\n框选时会自动填入当前图片的尺寸。"
+            "高级：如果坐标是从另一张大小不同的图片上量出来的，"
+            "在此填那张图的宽x高（如 3238x1295），会自动按比例换算到本图。"
         )
         self.qr_margin = QDoubleSpinBox()
         self.qr_margin.setRange(0.0, 2.0)
@@ -63,14 +64,14 @@ class QrPage(QWidget):
         self.qr_radius = QSpinBox()
         self.qr_radius.setRange(1, 64)
         self.qr_radius.setValue(21)
-        self.qr_radius.setToolTip("OpenCV 修补（inpaint）半径：越大过渡越平滑，太大会发糊。")
+        self.qr_radius.setToolTip("清除区域边缘的柔化程度：越大过渡越自然，太大会发糊。")
         params_layout.addWidget(QLabel("区域"), 2, 0)
         params_layout.addWidget(self.qr_box, 2, 1)
         params_layout.addWidget(QLabel("参考尺寸"), 3, 0)
         params_layout.addWidget(self.qr_reference_size, 3, 1)
         params_layout.addWidget(QLabel("边界比例"), 4, 0)
         params_layout.addWidget(self.qr_margin, 4, 1)
-        params_layout.addWidget(QLabel("修补半径"), 5, 0)
+        params_layout.addWidget(QLabel("边缘柔化"), 5, 0)
         params_layout.addWidget(self.qr_radius, 5, 1)
         params_layout.setColumnStretch(1, 1)
         layout.addWidget(params)

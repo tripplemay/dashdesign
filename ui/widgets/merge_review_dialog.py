@@ -38,7 +38,7 @@ class MergeReviewDialog(QDialog):
     def __init__(self, report: "merge.MergeReport", parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
         self.report = report
-        self.setWindowTitle("文档合并审校")
+        self.setWindowTitle("文档内容审校")
         screen = self.screen()
         if screen is not None:
             avail = screen.availableGeometry()
