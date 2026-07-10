@@ -910,7 +910,7 @@ class DashDesignQtApp(QMainWindow):
             self,
             "关于 DashDesign",
             f"DashDesign 印刷图片工作流\n版本 {APP_VERSION}\n\n"
-            "PySide6/Qt 客户端原型，用于基线文生图、批量印刷输出、图片修改和二维码区域清除。",
+            "面向教育机构海报制作的桌面工具：项目基线、文生图、批量印刷、图片修改与二维码区域清除。",
         )
 
     def _restore_settings(self) -> None:
