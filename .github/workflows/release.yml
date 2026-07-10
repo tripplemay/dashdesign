@@ -251,6 +251,7 @@ jobs:
     env:
       VERSION: ${{ github.event.inputs.version || github.ref_name }}
       GH_TOKEN: ${{ github.token }}
+      HAS_VPS: ${{ secrets.VPS_SSH_KEY != '' }}
 
     steps:
       - name: Checkout
@@ -293,3 +294,55 @@ jobs:
           else
             gh release create "$VERSION" dist/* --title "$VERSION" --notes "DashDesign ${VERSION#v}"
           fi
+
+      # Mirror the auto-update artifacts to the VPS so users who can't reach
+      # GitHub still get updates. Gated on the VPS_SSH_KEY secret; skipped when
+      # unset. Only the two auto-update artifacts (dmg + setup.exe) + a
+      # VPS-URL manifest are pushed; the portable zip is left on GitHub only.
+      - name: Mirror update to VPS
+        if: env.HAS_VPS == 'true'
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_UPDATES_DIR: ${{ secrets.VPS_UPDATES_DIR }}
+          VPS_UPDATES_BASE_URL: ${{ secrets.VPS_UPDATES_BASE_URL }}
+        run: |
+          set -euo pipefail
+          VERSION_CLEAN="${VERSION#v}"
+          MACOS_FILE="$(find dist -name '*macos.dmg' | head -n 1)"
+          WINDOWS_FILE="$(find dist -name '*windows-setup.exe' | head -n 1)"
+          test -n "$MACOS_FILE"; test -n "$WINDOWS_FILE"
+          MACOS_NAME="$(basename "$MACOS_FILE")"
+          WINDOWS_NAME="$(basename "$WINDOWS_FILE")"
+          BASE_URL="${VPS_UPDATES_BASE_URL:-https://dash.vpanel.cc/updates}"
+          BASE_URL="${BASE_URL%/}"
+          # VPS-flavoured manifest: download URLs point at the VPS mirror (sha256
+          # is computed from the same files, so it matches the GitHub build).
+          python scripts/generate_update_manifest.py \
+            --version "$VERSION_CLEAN" \
+            --notes "DashDesign ${VERSION_CLEAN}" \
+            --macos-url "${BASE_URL}/${MACOS_NAME}" \
+            --windows-url "${BASE_URL}/${WINDOWS_NAME}" \
+            --macos-file "$MACOS_FILE" \
+            --windows-file "$WINDOWS_FILE" \
+            --output dist/update-manifest.vps.json
+
+          KEY="$HOME/.ssh/deploy_key"
+          KNOWN="$HOME/.ssh/known_hosts"
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$KEY"
+          chmod 600 "$KEY"
+          PORT="${VPS_PORT:-22}"
+          DIR="${VPS_UPDATES_DIR:-/root/dashdesign/updates}"
+          SSH="ssh -i $KEY -p $PORT -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$KNOWN"
+          $SSH "$VPS_USER@$VPS_HOST" "mkdir -p '$DIR'"
+          scp -i "$KEY" -P "$PORT" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" \
+            "$MACOS_FILE" "$WINDOWS_FILE" "$VPS_USER@$VPS_HOST:$DIR/"
+          scp -i "$KEY" -P "$PORT" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" \
+            "dist/update-manifest.vps.json" "$VPS_USER@$VPS_HOST:$DIR/update-manifest.json"
+          # Keep only the current version's installers (bound VPS disk usage).
+          $SSH "$VPS_USER@$VPS_HOST" \
+            "find '$DIR' -maxdepth 1 -type f -name 'DashDesign-*' ! -name '*${VERSION_CLEAN}*' -delete"
+          rm -f "$KEY"

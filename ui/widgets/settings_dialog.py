@@ -173,6 +173,9 @@ class SettingsDialog(QDialog):
         self.cfg_api_key.setPlaceholderText("图像 API Key")
         self.cfg_model = QLineEdit(str(cfg.get("baseline_model", "") or "gpt-4o"))
         self.cfg_model.setPlaceholderText("文档合并模型，如 gpt-4o")
+        self.cfg_update_url = QLineEdit(str(cfg.get("update_manifest_url", "") or ""))
+        self.cfg_update_url.setPlaceholderText("留空 = 用内置 GitHub 地址；如 https://dash.vpanel.cc/updates/update-manifest.json")
+        self.cfg_update_url.setToolTip("客户端从这里检查/下载更新。指向 VPS 可让无法访问 GitHub 的用户也能更新。")
         self.save_cloud_btn = QPushButton("保存并上传云端")
         self.save_cloud_btn.clicked.connect(self._save_cloud)
         grid.addWidget(QLabel("基线端点"), 0, 0)
@@ -183,11 +186,13 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.cfg_api_key, 2, 1)
         grid.addWidget(QLabel("文档合并模型"), 3, 0)
         grid.addWidget(self.cfg_model, 3, 1)
-        grid.addWidget(self.save_cloud_btn, 4, 1)
+        grid.addWidget(QLabel("更新地址"), 4, 0)
+        grid.addWidget(self.cfg_update_url, 4, 1)
+        grid.addWidget(self.save_cloud_btn, 5, 1)
 
         divider = QLabel("— 修改管理密码 —")
         divider.setObjectName("Subtitle")
-        grid.addWidget(divider, 5, 0, 1, 2)
+        grid.addWidget(divider, 6, 0, 1, 2)
         self.new_pw_edit = QLineEdit()
         self.new_pw_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.new_pw_edit.setPlaceholderText("新管理密码（至少 6 位）")
@@ -199,11 +204,11 @@ class SettingsDialog(QDialog):
         # 表单内回车应提交当前操作，而不是触发对话框默认按钮直接关窗。
         self.new_pw_edit.returnPressed.connect(self._change_password)
         self.confirm_pw_edit.returnPressed.connect(self._change_password)
-        grid.addWidget(QLabel("新管理密码"), 6, 0)
-        grid.addWidget(self.new_pw_edit, 6, 1)
-        grid.addWidget(QLabel("确认新密码"), 7, 0)
-        grid.addWidget(self.confirm_pw_edit, 7, 1)
-        grid.addWidget(self.change_pw_btn, 8, 1)
+        grid.addWidget(QLabel("新管理密码"), 7, 0)
+        grid.addWidget(self.new_pw_edit, 7, 1)
+        grid.addWidget(QLabel("确认新密码"), 8, 0)
+        grid.addWidget(self.confirm_pw_edit, 8, 1)
+        grid.addWidget(self.change_pw_btn, 9, 1)
         grid.setColumnStretch(1, 1)
         self.cfg_container.setEnabled(False)
         outer.addWidget(self.cfg_container)
@@ -235,6 +240,7 @@ class SettingsDialog(QDialog):
         self.cfg_api_base.setText(str(cfg.get("image_api_base_url", "") or ""))
         self.cfg_api_key.setText(str(cfg.get("image_api_key", "") or ""))
         self.cfg_model.setText(str(cfg.get("baseline_model", "") or "gpt-4o"))
+        self.cfg_update_url.setText(str(cfg.get("update_manifest_url", "") or ""))
         self.cloud_status.setText("已解锁，可编辑并上传。")
 
     def _save_cloud(self) -> None:
@@ -244,6 +250,7 @@ class SettingsDialog(QDialog):
             "image_api_base_url": self.cfg_api_base.text().strip(),
             "image_api_key": self.cfg_api_key.text().strip(),
             "baseline_model": self.cfg_model.text().strip() or "gpt-4o",
+            "update_manifest_url": self.cfg_update_url.text().strip(),
         }
         try:
             cloud_bootstrap.push_app_config(password, config)

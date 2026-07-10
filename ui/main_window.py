@@ -114,7 +114,8 @@ class DashDesignQtApp(QMainWindow):
             theme.manager().changed.connect(self._on_theme_changed)
         self._restore_settings()
         self.statusBar().showMessage("就绪")
-        if configured_update_manifest_url():
+        # 更新地址可来自 baked 文件或 app-config 下发的 update_manifest_url，任一存在即启动静默检查。
+        if configured_update_manifest_url() or cloud_bootstrap.cached_app_config().get("update_manifest_url"):
             QTimer.singleShot(1600, lambda: self.check_for_updates(silent=True))
 
     def _build_actions(self) -> None:
@@ -758,17 +759,23 @@ class DashDesignQtApp(QMainWindow):
         open_path(self, self.last_output_dir)
 
     def check_for_updates(self, silent: bool = False) -> None:
-        manifest_url = configured_update_manifest_url()
+        # 主源优先 VPS（app-config 下发的 update_manifest_url，国内可达），
+        # 回退 baked 的 GitHub URL；两者任一可达即可检查/下载更新。
+        baked = configured_update_manifest_url()
+        primary = str(cloud_bootstrap.cached_app_config().get("update_manifest_url", "") or "").strip()
+        manifest_url = primary or baked
+        fallback_url = baked if primary else ""
         if not manifest_url:
             if not silent:
                 QMessageBox.information(
                     self,
                     "未配置更新通道",
-                    "请先配置 DASHDESIGN_UPDATE_MANIFEST_URL 指向 release manifest。",
+                    "尚未配置更新地址：请在“设置 → 云端配置”填写更新地址，"
+                    "或设置 DASHDESIGN_UPDATE_MANIFEST_URL。",
                 )
             return
         self.statusBar().showMessage("正在检查更新...")
-        fetch_update_manifest(manifest_url, self.update_signals, silent)
+        fetch_update_manifest(manifest_url, self.update_signals, silent, fallback_url=fallback_url)
 
     def handle_update_result(self, payload: dict, silent: bool) -> None:
         self.statusBar().showMessage("更新检查完成")

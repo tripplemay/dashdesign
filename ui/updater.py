@@ -34,24 +34,45 @@ class UpdateSignals(QObject):
     error = Signal(str, bool)
 
 
-def fetch_update_manifest(manifest_url: str, signals: UpdateSignals, silent: bool) -> None:
-    """Fetch the manifest on a daemon thread and emit the outcome via signals."""
+def _get_manifest(url: str) -> dict:
+    resp = requests.get(
+        url,
+        headers={"User-Agent": f"DashDesign/{APP_VERSION}"},
+        timeout=_MANIFEST_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_update_manifest(
+    manifest_url: str,
+    signals: UpdateSignals,
+    silent: bool,
+    fallback_url: str = "",
+) -> None:
+    """Fetch the manifest on a daemon thread and emit the outcome via signals.
+
+    Tries ``manifest_url`` first (the VPS mirror, reachable where GitHub is not),
+    then ``fallback_url`` (the baked GitHub URL) if the primary is unreachable —
+    so a down/blocked primary still resolves. The manifest that wins also decides
+    the download host (its ``platforms.*.url``), keeping fetch and download on
+    the same source.
+    """
+    # 去重 + 去空：回退地址与主源相同或为空时不重复请求。
+    urls = [u for u in (manifest_url, fallback_url) if u]
+    seen: "set[str]" = set()
+    ordered = [u for u in urls if not (u in seen or seen.add(u))]
 
     def worker() -> None:
         last_exc: "Exception | None" = None
-        for _ in range(_MANIFEST_RETRIES):
-            try:
-                resp = requests.get(
-                    manifest_url,
-                    headers={"User-Agent": f"DashDesign/{APP_VERSION}"},
-                    timeout=_MANIFEST_TIMEOUT,
-                )
-                resp.raise_for_status()
-                signals.result.emit(resp.json(), silent)
-                return
-            except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-        signals.error.emit(str(last_exc), silent)
+        for url in ordered:
+            for _ in range(_MANIFEST_RETRIES):
+                try:
+                    signals.result.emit(_get_manifest(url), silent)
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+        signals.error.emit(str(last_exc) if last_exc else "no manifest url", silent)
 
     threading.Thread(target=worker, daemon=True).start()
 
