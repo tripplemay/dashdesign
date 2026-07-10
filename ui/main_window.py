@@ -58,7 +58,7 @@ from ui.updater import (
     fetch_update_manifest,
 )
 from update_core import UpdateInfo, evaluate_manifest
-from ui.utils import open_path
+from ui.utils import friendly_error_hint, open_path
 from ui.widgets import ImagePreview, InfoBanner, ProgressPanel, SettingsDialog
 
 
@@ -82,6 +82,7 @@ class DashDesignQtApp(QMainWindow):
         self.last_output_dir: "Path | None" = None
         self.current_preview_path: "Path | None" = None
         self._running = False
+        self._running_title = ""  # 正在运行的工作流名，进度/状态栏标注归属
         self._stderr_tail: "deque[str]" = deque(maxlen=5)
         self._progress = ProgressModel()
         self._captured: "list[str]" = []
@@ -219,7 +220,9 @@ class DashDesignQtApp(QMainWindow):
         title_block.addWidget(self.subtitle_label)
         header.addLayout(title_block, 1)
         self.run_button = self._button("运行", self.run_current, primary=True)
+        self.run_button.setToolTip("运行当前工作流（Ctrl+R，macOS 为 ⌘R）")
         self.stop_button = self._button("停止", self.stop_process)
+        self.stop_button.setToolTip("停止正在运行的工作流（Ctrl+.）")
         self.open_output_button = self._button("打开输出", self.open_last_output)
         header.addWidget(self.run_button)
         header.addWidget(self.stop_button)
@@ -362,20 +365,27 @@ class DashDesignQtApp(QMainWindow):
         layout.addLayout(tools)
         return panel
 
+    # (标题, 副标题, 运行按钮文案；None = 本页无可运行工作流)
+    _PAGE_TITLES = [
+        ("项目基线", "管理与查看各项目的海报生成基线；本页无可运行任务，出图请到“文生图”。", None),
+        ("文生图", "基于当前项目基线生成无文字背景或完整 Image2 海报。", "运行文生图"),
+        ("批量印刷", "将根目录或指定目录中的图片输出为印刷规格。", "运行批量印刷"),
+        ("GPT 重建", "从源图生成 GPT Image 请求包，必要时直接调用 API。", "运行 GPT 重建"),
+        ("去二维码留空", "只清除指定二维码区域，后期手动添加二维码。", "运行去二维码"),
+    ]
+
     def switch_workflow(self, row: int) -> None:
         if row < 0:
             return
         self.stack.setCurrentIndex(row)
-        titles = [
-            ("项目基线", "查看当前 C 端海报生成基线，后续文生图会自动引用。"),
-            ("文生图", "基于当前项目基线生成无文字背景或完整 Image2 海报。"),
-            ("批量印刷", "将根目录或指定目录中的图片输出为印刷规格。"),
-            ("GPT 重建", "从源图生成 GPT Image 请求包，必要时直接调用 API。"),
-            ("去二维码留空", "只清除指定二维码区域，后期手动添加二维码。"),
-        ]
-        title, subtitle = titles[row]
+        title, subtitle, run_label = self._PAGE_TITLES[row]
         self.title_label.setText(title)
         self.subtitle_label.setText(subtitle)
+        # 运行按钮写明会跑什么，用户不必猜"运行"作用于哪个工作流；
+        # 基线页无可运行任务，直接隐藏而不是留一个费解的灰按钮。
+        self.run_button.setVisible(run_label is not None)
+        if run_label is not None:
+            self.run_button.setText(run_label)
         if row != 4 and self.qr_page.select_button.isChecked():
             self.qr_page.select_button.setChecked(False)
         if row == 0:
@@ -466,7 +476,9 @@ class DashDesignQtApp(QMainWindow):
 
     def _update_elapsed_status(self) -> None:
         # 每秒刷新：状态栏计时 + 进度面板（ETA/用时随之更新）。
-        self.statusBar().showMessage(f"运行中 · {self._elapsed_text()}")
+        # 标注工作流名：运行中切到别的页面时，用户仍能看出是谁在跑。
+        prefix = f"{self._running_title} " if self._running_title else ""
+        self.statusBar().showMessage(f"{prefix}运行中 · {self._elapsed_text()}")
         self._render_progress()
 
     def _render_progress(self) -> None:
@@ -496,6 +508,7 @@ class DashDesignQtApp(QMainWindow):
         self._progress = ProgressModel()
         self.progress_panel.reset()
         self.last_output_dir = output_dir
+        self._running_title = self._PAGE_TITLES[self.nav.currentRow()][0]
         self._capture("$ " + " ".join(command))
         self._set_running(True)
 
@@ -591,11 +604,12 @@ class DashDesignQtApp(QMainWindow):
         if process is not None:
             # 与 process_error 分支一致：释放已结束的 QProcess，避免多次运行累积。
             process.deleteLater()
+        workflow = self._running_title or "工作流"
         if success:
             self.statusBar().showMessage(f"完成 · 用时 {elapsed}")
             self.banner.show_message(
                 "success",
-                f"运行完成，用时 {elapsed}。",
+                f"{workflow}运行完成，用时 {elapsed}。",
                 action_label="打开输出目录",
                 action_callback=self.open_last_output,
                 timeout_ms=8000,
@@ -604,9 +618,13 @@ class DashDesignQtApp(QMainWindow):
         else:
             self.statusBar().showMessage(f"失败 · 退出码 {exit_code}")
             tail = self._stderr_tail[-1] if self._stderr_tail else ""
-            summary = f"运行失败（退出码 {exit_code}）。"
-            if tail:
-                summary += f" 最后错误：{tail[:160]}"
+            summary = f"{workflow}运行失败。"
+            # 先给用户一句能行动的人话；原始报错缩短保留，完整日志可导出。
+            hint = friendly_error_hint(" ".join(self._stderr_tail))
+            if hint:
+                summary += hint
+            elif tail:
+                summary += f" 错误信息：{tail[:120]}"
             self.banner.show_message(
                 "error",
                 summary,
@@ -845,9 +863,9 @@ class DashDesignQtApp(QMainWindow):
             QMessageBox.warning(self, "更新检查失败", message)
 
     def open_settings(self) -> None:
-        dialog = SettingsDialog(self)
-        if dialog.exec() == SettingsDialog.DialogCode.Accepted:
-            self.banner.show_message("success", "设置已保存。", timeout_ms=2500)
+        # 外观是实时预览、云端/本机配置由对话框内各自的保存按钮独立提交，
+        # 关闭对话框本身不"保存"任何东西，因此不再弹"设置已保存"误导用户。
+        SettingsDialog(self).exec()
 
     def show_about(self) -> None:
         QMessageBox.information(

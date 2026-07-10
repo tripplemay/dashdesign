@@ -63,6 +63,9 @@ class SettingsDialog(QDialog):
         )
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("关闭")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setToolTip(
+            "放弃本次外观改动并关闭（云端/本机配置由各自的保存按钮独立提交）"
+        )
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self._on_cancel)
         layout.addWidget(buttons)
@@ -193,6 +196,9 @@ class SettingsDialog(QDialog):
         self.confirm_pw_edit.setPlaceholderText("再次输入新密码")
         self.change_pw_btn = QPushButton("修改管理密码")
         self.change_pw_btn.clicked.connect(self._change_password)
+        # 表单内回车应提交当前操作，而不是触发对话框默认按钮直接关窗。
+        self.new_pw_edit.returnPressed.connect(self._change_password)
+        self.confirm_pw_edit.returnPressed.connect(self._change_password)
         grid.addWidget(QLabel("新管理密码"), 6, 0)
         grid.addWidget(self.new_pw_edit, 6, 1)
         grid.addWidget(QLabel("确认新密码"), 7, 0)

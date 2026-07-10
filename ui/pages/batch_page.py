@@ -171,6 +171,10 @@ class BatchPage(QWidget):
                 + (f" 有 {skipped} 张图片因文件名不含尺寸被跳过。" if skipped else ""),
             )
             return False
+        # 例行运行（无覆盖、无跳过）不打扰直接跑；只有会覆盖已有输出或
+        # 有文件被跳过时才需要用户确认，且默认按钮为"否"防回车误触。
+        if not self.batch_force.isChecked() and not skipped:
+            return True
         message = f"将处理 {count} 张图片，输出到：\n{self.batch_output.text()}"
         if skipped:
             message += f"\n\n另有 {skipped} 张图片文件名不含尺寸（如“200乘以80”），将被跳过。"
@@ -181,7 +185,7 @@ class BatchPage(QWidget):
             "确认批量处理",
             message,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
+            QMessageBox.StandardButton.No,
         )
         return reply == QMessageBox.StandardButton.Yes
 
@@ -211,7 +215,9 @@ class BatchPage(QWidget):
         settings.setValue("pages/batch/output_dir", self.batch_output.text())
         settings.setValue("pages/batch/style_mode", self.style_radio.isChecked())
         settings.setValue("pages/batch/dpi", self.batch_dpi.value())
-        settings.setValue("pages/batch/force", self.batch_force.isChecked())
+        # 覆盖开关是破坏性选项，刻意不持久化：每次启动都从"关"开始，
+        # 避免上次的勾选在毫无预期下抹掉已有成品。
+        settings.remove("pages/batch/force")
         settings.setValue("pages/batch/keep_masters", self.batch_keep_masters.isChecked())
 
     def restore_settings(self, settings) -> None:  # type: ignore[no-untyped-def]
@@ -224,7 +230,7 @@ class BatchPage(QWidget):
         else:
             self.pil_radio.setChecked(True)
         self.batch_dpi.setValue(settings.value("pages/batch/dpi", self.batch_dpi.value(), type=int))
-        self.batch_force.setChecked(settings.value("pages/batch/force", False, type=bool))
+        self.batch_force.setChecked(False)  # 破坏性开关不持久化，见 save_settings
         self.batch_keep_masters.setChecked(
             settings.value("pages/batch/keep_masters", False, type=bool)
         )

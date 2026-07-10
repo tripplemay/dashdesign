@@ -160,6 +160,15 @@ class BaselinePage(QWidget):
         baseline_service.repository()  # 主线程预热单例，避免多后台线程首次并发初始化
         self.reload()
 
+    def _notify(self, kind: str, text: str, timeout_ms: int = 8000) -> None:
+        """瞬时结果（成功/提示）走主窗口的非阻塞 banner，与运行反馈一致；
+        需要用户决策的确认与含长列表的失败仍用模态框。"""
+        banner = getattr(self.window(), "banner", None)
+        if banner is not None:
+            banner.show_message(kind, text, timeout_ms=timeout_ms)
+        else:  # 独立实例化（如测试）时退回模态
+            QMessageBox.information(self, "提示", text)
+
     # -- selection state ----------------------------------------------
     def _current_project(self) -> Optional[str]:
         return self.project_combo.currentData()
@@ -259,10 +268,9 @@ class BaselinePage(QWidget):
             return
         self.projectChanged.emit()  # 新项目已设为活跃
         self._refresh(selected_project=dialog.created_id)
-        QMessageBox.information(
-            self,
-            "已创建项目",
-            f"项目「{dialog.created_id}」已创建为草稿并设为活跃。"
+        self._notify(
+            "success",
+            f"项目「{dialog.created_id}」已创建为草稿并设为活跃，"
             "可通过“上传文档合并”补充内容，校验通过后发布。",
         )
 
@@ -323,8 +331,8 @@ class BaselinePage(QWidget):
             pass
         self.projectChanged.emit()
         self._refresh(selected_project=info.baseline_id)
-        QMessageBox.information(
-            self, "已从文档生成项目",
+        self._notify(
+            "success",
             f"项目「{info.baseline_id}」已生成为草稿并设为活跃（采纳 {len(report.accepted_changes())} 条候选）。"
             "请检查定位/受众/课程体系与文案，校验通过后发布。",
         )
@@ -401,10 +409,9 @@ class BaselinePage(QWidget):
             QMessageBox.warning(self, "新建草稿失败", str(exc))
             return
         self._refresh(project_id, new_version)
-        QMessageBox.information(
-            self,
-            "已新建草稿",
-            f"已从 {version} 新建草稿 {new_version}。\n可通过“打开 JSON”编辑或用文档合并功能补充内容，校验通过后发布。",
+        self._notify(
+            "success",
+            f"已从 {version} 新建草稿 {new_version}，可用文档合并功能补充内容，校验通过后发布。",
         )
 
     def _validate(self) -> None:
@@ -415,7 +422,7 @@ class BaselinePage(QWidget):
         errors = validation_errors(payload)
         gov = governance.governance_issues(payload)
         if not errors and not gov:
-            QMessageBox.information(self, "校验通过", "结构校验与治理检查均通过。")
+            self._notify("success", "校验通过：结构校验与治理检查均通过。")
             return
         lines = []
         if errors:
@@ -444,7 +451,7 @@ class BaselinePage(QWidget):
             return
         self.projectChanged.emit()
         self._refresh(project_id, version)
-        QMessageBox.information(self, "已发布", f"{version} 已发布并设为活跃版本。")
+        self._notify("success", f"{version} 已发布并设为活跃版本。")
 
     def _open_json(self) -> None:
         project_id, version = self._current_project(), self._current_version()
@@ -506,13 +513,13 @@ class BaselinePage(QWidget):
             self._merge_progress.close()
         self.merge_button.setEnabled(True)
         if not report.changes:
-            QMessageBox.information(self, "无新增内容", "未从该文档中提取到可合并的新信息。")
+            self._notify("info", "未从该文档中提取到可合并的新信息。")
             return
         dialog = MergeReviewDialog(report, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if not report.accepted_changes() and not report.new_document.get("document_id"):
-            QMessageBox.information(self, "未采纳任何内容", "没有采纳任何候选，未生成草稿。")
+            self._notify("info", "没有采纳任何候选，未生成草稿。")
             return
         repo = baseline_service.repository()
         project_id = self._merge_project  # 用发起时捕获的项目，避免中途切换错配
@@ -529,10 +536,9 @@ class BaselinePage(QWidget):
         if self._current_project() != project_id:
             baseline_service.set_active_project(project_id)
         self._refresh(project_id, new_version)
-        QMessageBox.information(
-            self,
-            "已生成合并草稿",
-            f"已根据文档生成草稿 {new_version}（采纳 {len(report.accepted_changes())} 条）。"
+        self._notify(
+            "success",
+            f"已根据文档生成草稿 {new_version}（采纳 {len(report.accepted_changes())} 条），"
             "请校验并在确认无误后发布。",
         )
 
