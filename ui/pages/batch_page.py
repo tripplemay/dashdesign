@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from app_runtime import first_image, runtime_tool_path
+from ui import theme
 from ui.output_paths import default_output, restore_output
 from ui.commands import BatchForm
 from ui.utils import scrollable_page_layout
@@ -100,6 +101,8 @@ class BatchPage(QWidget):
 
         options = QGroupBox("参数")
         option_layout = QGridLayout(options)
+        option_layout.setHorizontalSpacing(theme.SPACE_M)
+        option_layout.setVerticalSpacing(theme.SPACE_S)
         self.batch_dpi = QSpinBox()
         self.batch_dpi.setRange(30, 600)
         self.batch_dpi.setValue(200)
@@ -127,7 +130,7 @@ class BatchPage(QWidget):
             self.tool_status.hide()
         else:
             self.tool_status.setText(
-                "⚠ 未找到 Real-ESRGAN 二进制（tools/realesrgan-ncnn-vulkan）。"
+                "注意：未找到 Real-ESRGAN 二进制（tools/realesrgan-ncnn-vulkan）。"
                 "请先运行 scripts/bootstrap_runtime_assets.sh，或改用基础输出。"
             )
             self.tool_status.show()

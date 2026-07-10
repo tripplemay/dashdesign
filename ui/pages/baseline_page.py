@@ -12,7 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, Signal
+import qtawesome as qta
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QMessageBox,
     QProgressDialog,
@@ -35,7 +37,7 @@ from baseline.errors import BaselineError
 from baseline.schema import validation_errors
 from baseline import generate as generate_mod
 from baseline.store import today_str
-from ui import api_config, baseline_service
+from ui import api_config, baseline_service, theme
 from ui.merge_job import GenerateSignals, MergeSignals, run_generate_job, run_merge_job
 from ui.utils import open_path
 from ui.widgets import FlowLayout, MergeReviewDialog, NewProjectDialog, SettingsDialog
@@ -63,6 +65,8 @@ class BaselinePage(QWidget):
         # -- 项目 / 版本选择 -------------------------------------------
         selector = QGroupBox("项目与版本")
         sel_grid = QGridLayout(selector)
+        sel_grid.setHorizontalSpacing(theme.SPACE_M)
+        sel_grid.setVerticalSpacing(theme.SPACE_S)
         self.project_combo = QComboBox()
         self.project_combo.currentIndexChanged.connect(self._on_project_changed)
         self.version_combo = QComboBox()
@@ -72,20 +76,23 @@ class BaselinePage(QWidget):
         self.new_project_button.clicked.connect(self._new_project)
         self.use_project_button = QPushButton("设为当前项目")
         self.use_project_button.setToolTip("文生图等工作流将改用该项目的活跃基线；仅浏览无需此操作")
+        self.use_project_button.setObjectName("SecondaryButton")
         self.use_project_button.clicked.connect(self._use_project)
+        # 两行布局：单行塞 2 组下拉 + 2 个按钮在窄窗口会把按钮压成单字。
         sel_grid.addWidget(QLabel("项目"), 0, 0)
         sel_grid.addWidget(self.project_combo, 0, 1)
-        sel_grid.addWidget(QLabel("版本"), 0, 2)
-        sel_grid.addWidget(self.version_combo, 0, 3)
-        sel_grid.addWidget(self.use_project_button, 0, 4)
-        sel_grid.addWidget(self.new_project_button, 0, 5)
+        sel_grid.addWidget(self.use_project_button, 0, 2)
+        sel_grid.addWidget(QLabel("版本"), 1, 0)
+        sel_grid.addWidget(self.version_combo, 1, 1)
+        sel_grid.addWidget(self.new_project_button, 1, 2)
         sel_grid.setColumnStretch(1, 1)
-        sel_grid.setColumnStretch(3, 1)
         layout.addWidget(selector)
 
         # -- 元信息 ----------------------------------------------------
         meta = QGroupBox("基线信息")
         meta_layout = QGridLayout(meta)
+        meta_layout.setHorizontalSpacing(theme.SPACE_M)
+        meta_layout.setVerticalSpacing(theme.SPACE_S)
         self.baseline_name = QLabel("-")
         self.baseline_version = QLabel("-")
         self.baseline_status = QLabel("-")
@@ -108,6 +115,7 @@ class BaselinePage(QWidget):
         actions = FlowLayout(actions_container, margin=0, spacing=6)
         self.set_active_button = QPushButton("设为活跃")
         self.set_active_button.setToolTip("把选中的版本设为该项目出图时使用的活跃版本")
+        self.set_active_button.setObjectName("SecondaryButton")
         self.set_active_button.clicked.connect(self._set_active)
         self.new_draft_button = QPushButton("新建草稿")
         self.new_draft_button.setToolTip("从当前选中版本派生一个新草稿（追加式，链 parent_version）")
@@ -119,6 +127,7 @@ class BaselinePage(QWidget):
         self.merge_button.clicked.connect(self._upload_and_merge)
         self.publish_button = QPushButton("发布")
         self.publish_button.setToolTip("把草稿发布为不可变版本并设为活跃（需通过结构校验与治理检查）")
+        self.publish_button.setObjectName("DangerButton")  # 不可逆操作，视觉上警示
         self.publish_button.clicked.connect(self._publish)
         self.open_json_button = QPushButton("打开 JSON")
         self.open_json_button.clicked.connect(self._open_json)
@@ -136,10 +145,18 @@ class BaselinePage(QWidget):
             btn.setMinimumWidth(0)
             actions.addWidget(btn)
         layout.addWidget(actions_container)
+        hint_row = QHBoxLayout()
+        hint_row.setSpacing(6)
+        # 加载态的旋转指示：纯文字"加载中"会让人以为界面卡死。
+        self._loading_icon = qta.IconWidget()
+        self._loading_icon.setIconSize(QSize(14, 14))
+        self._loading_icon.hide()
         self.status_hint = QLabel("")
         self.status_hint.setObjectName("Subtitle")
         self.status_hint.setWordWrap(True)
-        layout.addWidget(self.status_hint)
+        hint_row.addWidget(self._loading_icon, 0, Qt.AlignmentFlag.AlignTop)
+        hint_row.addWidget(self.status_hint, 1)
+        layout.addLayout(hint_row)
 
         # -- 只读结构化预览 --------------------------------------------
         scroll = QScrollArea()
@@ -186,7 +203,15 @@ class BaselinePage(QWidget):
         """Load the overview off the UI thread; only the latest request is applied."""
         self._overview_seq += 1
         seq = self._overview_seq
-        self.status_hint.setText("加载中…")
+        self.status_hint.setText("正在加载…")
+        self._loading_icon.setIcon(
+            qta.icon(
+                "mdi6.loading",
+                color=theme.current_tokens()["accent"],
+                animation=qta.Spin(self._loading_icon),
+            )
+        )
+        self._loading_icon.show()
 
         def worker() -> None:
             try:
@@ -201,6 +226,7 @@ class BaselinePage(QWidget):
     def _apply_overview(self, overview: "baseline_service.BaselineOverview", seq: int) -> None:
         if seq != self._overview_seq:
             return  # 过期结果（用户已再次切换），丢弃
+        self._loading_icon.hide()
         self._global_active_project = overview.global_active_project
         self.project_combo.blockSignals(True)
         self.version_combo.blockSignals(True)
@@ -213,10 +239,14 @@ class BaselinePage(QWidget):
             if idx >= 0:
                 self.project_combo.setCurrentIndex(idx)
         self.version_combo.clear()
+        star = qta.icon("mdi6.star", color=theme.current_tokens()["accent"])
         for summary in reversed(overview.versions):  # 最新版本显示在最上（overview.versions 为升序）
             status = _STATUS_LABELS.get(summary.status, summary.status)
-            marker = " ★活跃" if summary.version == overview.active_version else ""
-            self.version_combo.addItem(f"{summary.version} · {status}{marker}", summary.version)
+            if summary.version == overview.active_version:
+                # 活跃版本用星形图标标注（文字符号 ★ 随系统字体渲染不一）
+                self.version_combo.addItem(star, f"{summary.version} · {status} · 活跃", summary.version)
+            else:
+                self.version_combo.addItem(f"{summary.version} · {status}", summary.version)
         if overview.selected_version:
             idx = self.version_combo.findData(overview.selected_version)
             if idx >= 0:
@@ -228,6 +258,7 @@ class BaselinePage(QWidget):
     def _on_overview_failed(self, message: str, seq: int) -> None:
         if seq != self._overview_seq:
             return
+        self._loading_icon.hide()
         self._clear_sections()
         self._set_meta("加载失败", "-", "-", "-")
         self._add_text_section("错误", message)

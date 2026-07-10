@@ -8,9 +8,11 @@ from pathlib import Path
 
 import qtawesome as qta
 from PySide6.QtCore import (
+    QEasingCurve,
     QElapsedTimer,
     QProcess,
     QProcessEnvironment,
+    QPropertyAnimation,
     QSettings,
     QSize,
     Qt,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -101,6 +104,7 @@ class DashDesignQtApp(QMainWindow):
         self.download_signals.cancelled.connect(self._on_update_cancelled)
         self._update_dialog: "QProgressDialog | None" = None
         self._update_cancelled = False
+        self._page_anim: "QPropertyAnimation | None" = None
 
         self._build_actions()
         self._build_menu()
@@ -223,6 +227,7 @@ class DashDesignQtApp(QMainWindow):
         self.run_button = self._button("运行", self.run_current, primary=True)
         self.run_button.setToolTip("运行当前工作流（Ctrl+R，macOS 为 ⌘R）")
         self.stop_button = self._button("停止", self.stop_process)
+        self.stop_button.setObjectName("SecondaryButton")
         self.stop_button.setToolTip("停止正在运行的工作流（Ctrl+.）")
         self.open_output_button = self._button("打开输出", self.open_last_output)
         header.addWidget(self.run_button)
@@ -375,10 +380,35 @@ class DashDesignQtApp(QMainWindow):
         ("去二维码留空", "只清除指定二维码区域，后期手动添加二维码。", "运行去二维码"),
     ]
 
+    def _fade_in_page(self, widget: QWidget) -> None:
+        """切页 150ms 淡入；结束后移除 effect，避免常驻影响滚动渲染。"""
+        if self._page_anim is not None:
+            self._page_anim.stop()  # 触发上一个动画的清理
+            self._page_anim = None
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+        anim = QPropertyAnimation(effect, b"opacity", widget)
+        anim.setDuration(150)
+        anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+
+        def _cleanup() -> None:
+            widget.setGraphicsEffect(None)
+            if self._page_anim is anim:
+                self._page_anim = None
+
+        anim.finished.connect(_cleanup)
+        self._page_anim = anim
+        anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
+
     def switch_workflow(self, row: int) -> None:
         if row < 0:
             return
+        previous = self.stack.currentIndex()
         self.stack.setCurrentIndex(row)
+        if previous != row:
+            self._fade_in_page(self.stack.currentWidget())
         title, subtitle, run_label = self._PAGE_TITLES[row]
         self.title_label.setText(title)
         self.subtitle_label.setText(subtitle)

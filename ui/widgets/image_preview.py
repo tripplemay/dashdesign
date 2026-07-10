@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import qtawesome as qta
 from PySide6.QtCore import QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QImageReader, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -14,6 +15,12 @@ from PySide6.QtWidgets import (
     QGraphicsView,
     QWidget,
 )
+
+from ui import theme
+
+# 画布空置时的居中引导（画布底色两套主题下都是深色，用浅灰前景）。
+_EMPTY_HINT = "拖入图片，或点击「预览输入 / 预览输出」"
+_EMPTY_FG = "#8A919E"
 
 # 超过约 3000 万像素的图先降采样到 6000px 内再进预览，避免 9000px 级
 # 印刷大图整幅解码导致切页卡顿；预览质量不受影响（屏幕远小于 6000px）。
@@ -79,6 +86,37 @@ class ImagePreview(QGraphicsView):
         self._source_size = QSize()
         self.zoom_level = 1.0
         self.resetTransform()
+        self.viewport().update()  # 触发空态占位重绘
+
+    def drawForeground(self, painter: QPainter, rect) -> None:  # noqa: N802 (Qt API)
+        """画布为空时居中绘制引导占位，而不是留一整块空色块。"""
+        super().drawForeground(painter, rect)
+        if self.pixmap_item is not None:
+            return
+        painter.save()
+        painter.resetTransform()
+        viewport = self.viewport().rect()
+        color = QColor(_EMPTY_FG)
+        icon_size = 44
+        pixmap = qta.icon("mdi6.image-outline", color=color).pixmap(
+            QSize(icon_size, icon_size), self.devicePixelRatioF()
+        )
+        painter.drawPixmap(
+            viewport.center().x() - icon_size // 2,
+            viewport.center().y() - icon_size - 4,
+            pixmap,
+        )
+        painter.setPen(color)
+        text_rect = QRect(
+            viewport.left() + 12,
+            viewport.center().y() + 6,
+            viewport.width() - 24,
+            60,
+        )
+        painter.drawText(
+            text_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, _EMPTY_HINT
+        )
+        painter.restore()
 
     def source_size(self) -> QSize:
         return QSize(self._source_size)
@@ -102,10 +140,14 @@ class ImagePreview(QGraphicsView):
     def _ensure_selection_item(self) -> QGraphicsRectItem:
         if self._selection_item is None or self._selection_item.scene() is None:
             item = QGraphicsRectItem()
-            pen = QPen(QColor(224, 62, 62), 0)
+            # 选区颜色跟随主题 error token，不再硬编码红色。
+            line = QColor(theme.current_tokens()["error_fg"])
+            fill = QColor(line)
+            fill.setAlpha(60)
+            pen = QPen(line, 0)
             pen.setStyle(Qt.PenStyle.DashLine)
             item.setPen(pen)
-            item.setBrush(QBrush(QColor(224, 62, 62, 60)))
+            item.setBrush(QBrush(fill))
             item.setZValue(10)
             self.scene.addItem(item)
             self._selection_item = item

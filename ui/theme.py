@@ -16,6 +16,12 @@ from PySide6.QtWidgets import QApplication
 THEME_MODES = ("system", "light", "dark")
 _SETTINGS_KEY = "appearance/mode"
 
+# 统一间距刻度（px）：布局代码用这些常量而不是散落的魔法数。
+SPACE_XS = 4
+SPACE_S = 8
+SPACE_M = 12
+SPACE_L = 16
+
 TOKENS_LIGHT = {
     "accent": "#2563EB",
     "accent_hover": "#1D4ED8",
@@ -85,6 +91,10 @@ QLabel#Subtitle {
     color: $subtitle_fg;
     font-size: 12px;
 }
+QLabel#SectionHeader {
+    font-size: 15px;
+    font-weight: 600;
+}
 QListWidget#NavList {
     background: $sidebar_bg;
     border: none;
@@ -100,10 +110,14 @@ QListWidget#NavList::item {
 QListWidget#NavList::item:hover {
     background: $sidebar_item_hover;
 }
+QListWidget#NavList::item {
+    border-left: 3px solid transparent;
+}
 QListWidget#NavList::item:selected {
     background: $sidebar_item_selected_bg;
     color: $sidebar_item_selected_fg;
     font-weight: 600;
+    border-left: 3px solid $accent;
 }
 QGroupBox {
     background: $card_bg;
@@ -140,6 +154,35 @@ QPushButton#PrimaryButton:disabled {
     background: transparent;
     color: $subtitle_fg;
     border: 1px solid $card_border;
+}
+QPushButton#SecondaryButton {
+    background: transparent;
+    color: $accent;
+    border: 1px solid $accent;
+}
+QPushButton#SecondaryButton:hover {
+    background: $sidebar_item_selected_bg;
+}
+QPushButton#SecondaryButton:disabled {
+    color: $subtitle_fg;
+    border: 1px solid $card_border;
+}
+QPushButton#DangerButton {
+    background: transparent;
+    color: $error_fg;
+    border: 1px solid $error_fg;
+    font-weight: 600;
+}
+QPushButton#DangerButton:hover {
+    background: $error_bg;
+}
+QPushButton#DangerButton:disabled {
+    color: $subtitle_fg;
+    border: 1px solid $card_border;
+    font-weight: 400;
+}
+QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus, QPlainTextEdit:focus {
+    border: 1px solid $accent;
 }
 QLineEdit, QComboBox, QAbstractSpinBox {
     min-height: 26px;
@@ -233,6 +276,9 @@ QLabel#Subtitle { color: #5C6370; }
 QGroupBox { border: 1px solid #D9D9D9; border-radius: 8px; margin-top: 14px; padding: 12px; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; font-weight: 600; }
 QPushButton { min-height: 26px; padding: 4px 14px; border-radius: 6px; }
+QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus, QPlainTextEdit:focus {
+    border: 1px solid #2563EB;
+}
 """
 
 
