@@ -862,12 +862,21 @@ class DashDesignQtApp(QMainWindow):
 
     def _close_update_dialog(self) -> None:
         if self._update_dialog is not None:
+            # 先断开 canceled：QProgressDialog.close() 会自动发 canceled 信号，
+            # 若不断开会误触发 _cancel_update_download，把"正常完成"当成用户取消
+            # ——这正是此前安装器从未被启动、每次更新都"下载完没反应"的真凶。
+            try:
+                self._update_dialog.canceled.disconnect(self._cancel_update_download)
+            except (TypeError, RuntimeError):
+                pass
             self._update_dialog.close()
             self._update_dialog = None
 
     def _on_update_downloaded(self, path: str) -> None:
+        # 在关闭对话框之前取消状态就要读好：关闭动作本身可能改动它。
+        was_cancelled = self._update_cancelled
         self._close_update_dialog()
-        if self._update_cancelled:
+        if was_cancelled:
             # 取消与完成竞态：下载刚好在取消前完成也不要启动安装程序。
             return
         if not installer.launch_windows_installer(Path(path)):
