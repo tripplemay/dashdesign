@@ -199,7 +199,7 @@ class DashDesignQtApp(QMainWindow):
             ("baseline", "项目基线"),
             ("text-image", "文生图"),
             ("batch", "批量印刷"),
-            ("gpt", "GPT 重建"),
+            ("gpt", "图片修改"),
             ("qr", "去二维码留空"),
         ]:
             item = QListWidgetItem(label)
@@ -376,7 +376,7 @@ class DashDesignQtApp(QMainWindow):
         ("项目基线", "管理与查看各项目的海报生成基线；本页无可运行任务，出图请到“文生图”。", None),
         ("文生图", "基于当前项目基线生成无文字背景或完整 Image2 海报。", "运行文生图"),
         ("批量印刷", "将根目录或指定目录中的图片输出为印刷规格。", "运行批量印刷"),
-        ("GPT 重建", "从源图生成 GPT Image 请求包，必要时直接调用 API。", "运行 GPT 重建"),
+        ("图片修改", "上传一张图片，用 AI 按你的要求修改它。", "运行图片修改"),
         ("去二维码留空", "只清除指定二维码区域，后期手动添加二维码。", "运行去二维码"),
     ]
 
@@ -903,7 +903,7 @@ class DashDesignQtApp(QMainWindow):
             self,
             "关于 DashDesign",
             f"DashDesign 印刷图片工作流\n版本 {APP_VERSION}\n\n"
-            "PySide6/Qt 客户端原型，用于基线文生图、批量印刷输出、GPT 重建请求包和二维码区域清除。",
+            "PySide6/Qt 客户端原型，用于基线文生图、批量印刷输出、图片修改和二维码区域清除。",
         )
 
     def _restore_settings(self) -> None:

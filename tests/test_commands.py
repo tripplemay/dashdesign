@@ -197,7 +197,6 @@ class TestGptCommand:
         base = GptForm(
             source=str(source),
             output_dir="/tmp/gpt-out",
-            mode="edit",
             dpi="200",
             description="",
             base_url="",
@@ -211,6 +210,7 @@ class TestGptCommand:
         command, output_dir, env = build_gpt_command(self.gpt_form(source))
         assert "gpt" in command
         assert str(source) in command
+        # 图片修改只保留编辑原图，恒定 --api-mode edit（已无模式选择）。
         assert command[command.index("--api-mode") + 1] == "edit"
         assert "--execute" in command  # GUI 始终调用 API（无离线模式）
         assert output_dir == Path("/tmp/gpt-out")
