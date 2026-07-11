@@ -10,6 +10,10 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 
 ROOT = Path.cwd()
 IS_MACOS = sys.platform == "darwin"
+# Platform-native app icon (committed under assets/, regenerated via
+# scripts/build_icons.sh). PyInstaller embeds .ico into the Windows exe and
+# uses .icns for the macOS .app bundle.
+ICON_FILE = str(ROOT / "assets" / ("app_icon.icns" if IS_MACOS else "app_icon.ico"))
 
 
 def collect_datas():
@@ -22,6 +26,10 @@ def collect_datas():
         path = ROOT / file_name
         if path.exists():
             datas.append((str(path), "."))
+    # Runtime window icon (taskbar/dock/title bar) loaded via QIcon.
+    icon_png = ROOT / "assets" / "app_icon.png"
+    if icon_png.exists():
+        datas.append((str(icon_png), "assets"))
     baseline_dir = ROOT / "docs" / "baseline"
     if baseline_dir.exists():
         for file_name in ("README.md", "baseline.schema.json", "baseline.v1.draft.json"):
@@ -135,6 +143,7 @@ gui_exe = EXE(
     [],
     exclude_binaries=True,
     name="DashDesign",
+    icon=ICON_FILE,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -192,7 +201,7 @@ if IS_MACOS:
     app = BUNDLE(
         coll,
         name="DashDesign.app",
-        icon=None,
+        icon=str(ROOT / "assets" / "app_icon.icns"),
         bundle_identifier="cn.dashdesign.app",
         info_plist={
             "CFBundleDisplayName": "DashDesign",

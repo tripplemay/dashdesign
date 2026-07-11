@@ -23,6 +23,7 @@ BASELINE_RELATIVE_PATH = Path("docs") / "baseline" / "baseline.v1.draft.json"
 BASELINE_SCHEMA_RELATIVE_PATH = Path("docs") / "baseline" / "baseline.schema.json"
 PROMPT_TEMPLATE_RELATIVE_PATH = Path("docs") / "prompt_templates" / "full_poster_templates.v1.json"
 SCENE_PROMPTS_RELATIVE_PATH = Path("docs") / "prompt_templates" / "scene_prompts.v1.json"
+APP_ICON_RELATIVE_PATH = Path("assets") / "app_icon.png"
 
 
 def read_app_version() -> str:
@@ -170,6 +171,14 @@ def scene_prompts_library_path() -> Path:
     if bundled.exists():
         return bundled
     return PROJECT_ROOT / SCENE_PROMPTS_RELATIVE_PATH
+
+
+def app_icon_path() -> Path:
+    """The app icon PNG for the runtime window/taskbar/dock icon (Qt QIcon)."""
+    bundled = APP_ROOT / APP_ICON_RELATIVE_PATH
+    if bundled.exists():
+        return bundled
+    return PROJECT_ROOT / APP_ICON_RELATIVE_PATH
 
 
 def evidenced_text(value: object) -> str:

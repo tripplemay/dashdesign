@@ -20,7 +20,7 @@ from PySide6.QtCore import (
     QUrl,
     qVersion,
 )
-from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -45,6 +45,7 @@ from app_runtime import (
     APP_VERSION,
     IMAGE_EXTENSIONS,
     PROJECT_ROOT,
+    app_icon_path,
     configured_update_manifest_url,
     first_output_image,
     platform_key,
@@ -72,6 +73,9 @@ class DashDesignQtApp(QMainWindow):
         # baseline endpoint) in the background so ordinary users set nothing.
         cloud_bootstrap.bootstrap_async()
         self.setWindowTitle(f"DashDesign 印刷图片工作流 · v{APP_VERSION}")
+        _icon = app_icon_path()
+        if _icon.exists():
+            self.setWindowIcon(QIcon(str(_icon)))
         # 最小高度须容得下 1080p@150%（逻辑 720，扣任务栏/标题栏约剩 650）与
         # 1366x768 笔记本；初始尺寸按屏幕可用区域钳制，避免首启即超出屏幕。
         self.setMinimumSize(960, 560)
@@ -1008,6 +1012,9 @@ def create_application(argv: list[str]) -> QApplication:
     app = QApplication(argv)
     app.setApplicationName("DashDesign")
     app.setOrganizationName("DashDesign")
+    icon_path = app_icon_path()
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
     # 双平台统一 Fusion 基底：可被 QSS 完整定制，且是 Windows 下唯一
     # 支持暗色 palette 的内置 style；macOS 菜单栏仍走原生。
     if "Fusion" in QStyleFactory.keys():
