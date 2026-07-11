@@ -71,7 +71,7 @@ class DashDesignQtApp(QMainWindow):
         # Zero-config bootstrap: refresh the shared cloud config (image API creds,
         # baseline endpoint) in the background so ordinary users set nothing.
         cloud_bootstrap.bootstrap_async()
-        self.setWindowTitle("DashDesign 印刷图片工作流")
+        self.setWindowTitle(f"DashDesign 印刷图片工作流 · v{APP_VERSION}")
         # 最小高度须容得下 1080p@150%（逻辑 720，扣任务栏/标题栏约剩 650）与
         # 1366x768 笔记本；初始尺寸按屏幕可用区域钳制，避免首启即超出屏幕。
         self.setMinimumSize(960, 560)
