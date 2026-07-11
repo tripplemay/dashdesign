@@ -51,7 +51,7 @@ class PathField(QWidget):
                 self,
                 "选择图片",
                 str(PROJECT_ROOT),
-                "Images (*.jpg *.jpeg *.png *.webp *.tif *.tiff *.bmp);;All Files (*)",
+                "图片 (*.jpg *.jpeg *.png *.webp *.tif *.tiff *.bmp);;所有文件 (*)",
             )
         if selected:
             self.setText(selected)

@@ -505,7 +505,7 @@ class BaselinePage(QWidget):
             return
         path, _ = QFileDialog.getOpenFileName(
             self, "选择项目介绍/背景文档", "",
-            "文档 (*.pdf *.docx *.txt *.md);;All Files (*)",
+            "文档 (*.pdf *.docx *.txt *.md);;所有文件 (*)",
         )
         if not path:
             return

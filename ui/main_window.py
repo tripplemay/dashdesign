@@ -10,6 +10,7 @@ import qtawesome as qta
 from PySide6.QtCore import (
     QEasingCurve,
     QElapsedTimer,
+    QLibraryInfo,
     QProcess,
     QProcessEnvironment,
     QPropertyAnimation,
@@ -17,6 +18,7 @@ from PySide6.QtCore import (
     QSize,
     Qt,
     QTimer,
+    QTranslator,
     QUrl,
     qVersion,
 )
@@ -476,7 +478,7 @@ class DashDesignQtApp(QMainWindow):
             self.banner.show_message("info", "还没有可导出的运行输出。", timeout_ms=3000)
             return
         default = str(Path.home() / f"dashdesign-log-{datetime.now():%Y%m%d-%H%M%S}.txt")
-        path, _ = QFileDialog.getSaveFileName(self, "导出运行日志", default, "Text Files (*.txt);;All Files (*)")
+        path, _ = QFileDialog.getSaveFileName(self, "导出运行日志", default, "文本文件 (*.txt);;所有文件 (*)")
         if not path:
             return
         try:
@@ -1008,10 +1010,25 @@ def image_info_text(path: Path) -> str:
     return " · ".join(parts)
 
 
+def _install_qt_translations(app: QApplication) -> None:
+    """Force Qt's built-in strings (QMessageBox 是/否/确定, edit context menus,
+    non-native dialogs) to Chinese so they match the Chinese-only UI, regardless
+    of the system locale. Without this Qt shows them in English.
+
+    Only ``qtbase_zh_CN.qm`` matters — it carries all the standard-widget
+    strings and is shipped with PySide6. Keep the translator ref on the app so
+    it isn't garbage-collected."""
+    tr_dir = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    translator = QTranslator(app)
+    if translator.load("qtbase_zh_CN", tr_dir):
+        app.installTranslator(translator)
+
+
 def create_application(argv: list[str]) -> QApplication:
     app = QApplication(argv)
     app.setApplicationName("DashDesign")
     app.setOrganizationName("DashDesign")
+    _install_qt_translations(app)
     icon_path = app_icon_path()
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))

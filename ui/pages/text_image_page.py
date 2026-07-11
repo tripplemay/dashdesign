@@ -15,12 +15,14 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -115,8 +117,6 @@ class TextImagePage(QWidget):
 
         # --- 完整海报模板（仅 full_poster） ---------------------------
         self.template_group = QGroupBox("完整海报模板")
-        template_layout = QVBoxLayout(self.template_group)
-        template_layout.setSpacing(10)
         self.t2i_purpose_template = QComboBox()
         self.t2i_purpose_template.addItem("课程招生海报", "course_enrollment")
         self.t2i_purpose_template.addItem("免费试听/体验课", "trial_class")
@@ -137,51 +137,47 @@ class TextImagePage(QWidget):
         self.t2i_text_density.addItem("中文字", "medium")
         self.t2i_text_density.addItem("低文字", "low")
         self.t2i_text_density.addItem("高文字", "high")
-        # 模板下拉不设硬编码最小宽：窄窗口（表单区被预览挤压）时允许收缩，
-        # 避免同行两个 150px 下拉把内容区撑出横向滚动条。
+        self.t2i_candidates = QSpinBox()
+        self.t2i_candidates.setRange(1, 8)
+        self.t2i_candidates.setValue(4)
+        self.t2i_candidates.setToolTip("一次生成的候选海报数量；候选越多可挑选空间越大，费用也越高。")
+        self.t2i_full_style = QLineEdit("")
+        self.t2i_full_style.setPlaceholderText("可选：补充模板之外的画面/字体/气质要求")
+
+        # 每个下拉独占一行、字段列拉伸铺满：长中文选项（如"顶部标题+模块+CTA"）
+        # 关闭态完整显示，不再被 minimumContentsLength(6) 钳成 3 字截断；单列布局
+        # 随窗口收缩也不会像双下拉同行那样撑出横向滚动条。
+        template_grid = QGridLayout(self.template_group)
+        template_grid.setHorizontalSpacing(12)
+        template_grid.setVerticalSpacing(8)
+        template_grid.setColumnStretch(1, 1)
         for combo in (
             self.t2i_purpose_template,
             self.t2i_style_template,
             self.t2i_layout_template,
             self.t2i_text_density,
         ):
-            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-            combo.setMinimumContentsLength(6)
-
-        template_row = QHBoxLayout()
-        template_row.setSpacing(8)
-        template_row.addWidget(QLabel("用途"))
-        template_row.addWidget(self.t2i_purpose_template)
-        template_row.addSpacing(12)
-        template_row.addWidget(QLabel("风格"))
-        template_row.addWidget(self.t2i_style_template)
-        template_row.addStretch(1)
-        template_layout.addLayout(template_row)
-
-        layout_row = QHBoxLayout()
-        layout_row.setSpacing(8)
-        layout_row.addWidget(QLabel("构图"))
-        layout_row.addWidget(self.t2i_layout_template)
-        layout_row.addSpacing(12)
-        layout_row.addWidget(QLabel("文字密度"))
-        layout_row.addWidget(self.t2i_text_density)
-        layout_row.addSpacing(12)
-        self.t2i_candidates = QSpinBox()
-        self.t2i_candidates.setRange(1, 8)
-        self.t2i_candidates.setValue(4)
-        self.t2i_candidates.setToolTip("一次生成的候选海报数量；候选越多可挑选空间越大，费用也越高。")
-        layout_row.addWidget(QLabel("候选数"))
-        layout_row.addWidget(self.t2i_candidates)
-        layout_row.addStretch(1)
-        template_layout.addLayout(layout_row)
-
-        style_row = QHBoxLayout()
-        style_row.setSpacing(8)
-        self.t2i_full_style = QLineEdit("")
-        self.t2i_full_style.setPlaceholderText("可选：补充模板之外的画面/字体/气质要求")
-        style_row.addWidget(QLabel("补充要求"))
-        style_row.addWidget(self.t2i_full_style, 1)
-        template_layout.addLayout(style_row)
+            # Expanding 铺满字段列（正常宽度下完整显示长中文），但保留默认最小
+            # 宽可收缩：极窄窗才 elide，不像 AdjustToContents 那样把最小宽钉死
+            # 成内容宽而撑出横向滚动条。弹出列表默认自适应内容，仍显示全文。
+            combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        rows = [
+            ("用途", self.t2i_purpose_template),
+            ("风格", self.t2i_style_template),
+            ("构图", self.t2i_layout_template),
+            ("文字密度", self.t2i_text_density),
+        ]
+        for r, (label, field) in enumerate(rows):
+            template_grid.addWidget(QLabel(label), r, 0, Qt.AlignmentFlag.AlignRight)
+            template_grid.addWidget(field, r, 1)
+        # 候选数（数值控件，无需铺满）单独一行靠左
+        cand_row = QHBoxLayout()
+        cand_row.addWidget(self.t2i_candidates)
+        cand_row.addStretch(1)
+        template_grid.addWidget(QLabel("候选数"), 4, 0, Qt.AlignmentFlag.AlignRight)
+        template_grid.addLayout(cand_row, 4, 1)
+        template_grid.addWidget(QLabel("补充要求"), 5, 0, Qt.AlignmentFlag.AlignRight)
+        template_grid.addWidget(self.t2i_full_style, 5, 1)
         layout.addWidget(self.template_group)
 
         # --- 印刷尺寸与模型参数 ----------------------------------------
@@ -217,13 +213,17 @@ class TextImagePage(QWidget):
         model_row = QHBoxLayout()
         model_row.setSpacing(8)
         self.t2i_image_size = QComboBox()
-        self.t2i_image_size.addItems(["auto", "1536x1024", "1024x1536", "1536x1536", "1024x1024"])
+        # 中文显示 + 英文数据（后端参数值不变）；像素尺寸属技术标识保留原样。
+        self.t2i_image_size.addItem("自动", "auto")
+        for _px in ("1536x1024", "1024x1536", "1536x1536", "1024x1024"):
+            self.t2i_image_size.addItem(_px, _px)
         self.t2i_image_size.setToolTip(
-            "模型生成的母版像素（auto 会按印刷宽高比自动选择）。\n"
+            "模型生成的母版像素（自动会按印刷宽高比选择）。\n"
             "母版之后会被放大到印刷像素，比例不符时用模糊扩边补齐。"
         )
         self.t2i_quality = QComboBox()
-        self.t2i_quality.addItems(["high", "medium", "low", "auto"])
+        for _label, _val in (("高", "high"), ("中", "medium"), ("低", "low"), ("自动", "auto")):
+            self.t2i_quality.addItem(_label, _val)
         model_row.addWidget(QLabel("模型尺寸"))
         model_row.addWidget(self.t2i_image_size)
         model_row.addSpacing(12)
@@ -344,8 +344,8 @@ class TextImagePage(QWidget):
             style_template=str(self.t2i_style_template.currentData() or "tech_neon"),
             layout_template=str(self.t2i_layout_template.currentData() or "headline_modules_cta"),
             text_density=str(self.t2i_text_density.currentData() or "medium"),
-            image_size=self.t2i_image_size.currentText(),
-            quality=self.t2i_quality.currentText(),
+            image_size=str(self.t2i_image_size.currentData() or "auto"),
+            quality=str(self.t2i_quality.currentData() or "high"),
             postprocess=self.t2i_postprocess.isChecked(),
             base_url=api_config.load_base_url(),
             api_key=api_config.load_api_key(),
@@ -366,8 +366,8 @@ class TextImagePage(QWidget):
         settings.setValue("pages/t2i/width_cm", self.t2i_width_cm.value())
         settings.setValue("pages/t2i/height_cm", self.t2i_height_cm.value())
         settings.setValue("pages/t2i/dpi", self.t2i_dpi.value())
-        settings.setValue("pages/t2i/image_size", self.t2i_image_size.currentText())
-        settings.setValue("pages/t2i/quality", self.t2i_quality.currentText())
+        settings.setValue("pages/t2i/image_size", str(self.t2i_image_size.currentData()))
+        settings.setValue("pages/t2i/quality", str(self.t2i_quality.currentData()))
         settings.setValue("pages/t2i/postprocess", self.t2i_postprocess.isChecked())
         # 提示词/文案属于单次运行输入，不持久化；API 凭据由 ui.api_config 统一持久化。
 
@@ -385,6 +385,10 @@ class TextImagePage(QWidget):
             (self.t2i_style_template, "pages/t2i/style_template"),
             (self.t2i_layout_template, "pages/t2i/layout_template"),
             (self.t2i_text_density, "pages/t2i/text_density"),
+            # image_size/quality 现用中文显示+英文数据，按 data 恢复（旧版存的
+            # 也是 auto/high/1536x1024 这类英文值，findData 仍能命中）。
+            (self.t2i_image_size, "pages/t2i/image_size"),
+            (self.t2i_quality, "pages/t2i/quality"),
         ):
             value = settings.value(key)
             if value is not None:
@@ -395,14 +399,5 @@ class TextImagePage(QWidget):
         self.t2i_width_cm.setValue(settings.value("pages/t2i/width_cm", self.t2i_width_cm.value(), type=float))
         self.t2i_height_cm.setValue(settings.value("pages/t2i/height_cm", self.t2i_height_cm.value(), type=float))
         self.t2i_dpi.setValue(settings.value("pages/t2i/dpi", self.t2i_dpi.value(), type=int))
-        for combo, key in (
-            (self.t2i_image_size, "pages/t2i/image_size"),
-            (self.t2i_quality, "pages/t2i/quality"),
-        ):
-            value = settings.value(key)
-            if value is not None:
-                index = combo.findText(str(value))
-                if index >= 0:
-                    combo.setCurrentIndex(index)
         self.t2i_postprocess.setChecked(settings.value("pages/t2i/postprocess", True, type=bool))
         self.sync_text_image_mode()

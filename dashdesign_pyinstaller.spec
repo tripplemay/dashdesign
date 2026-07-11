@@ -50,6 +50,10 @@ GUI_DATAS = (
     COMMON_DATAS
     + collect_data_files("qdarktheme")
     + collect_data_files("qtawesome")
+    # Qt 中文翻译（消息框按钮/右键菜单）由 QTranslator 在运行时加载。PySide6 的
+    # 默认 PyInstaller hook 已自动收全语系 qtbase 翻译，这里再显式收一份 zh_CN
+    # 仅作保险，钉住我们依赖的那个（datas 会去重，无额外体积）。
+    + collect_data_files("PySide6", includes=["**/translations/qtbase_zh_CN.qm"])
 )
 GUI_BINARIES = []
 GUI_HIDDEN_IMPORTS = [
