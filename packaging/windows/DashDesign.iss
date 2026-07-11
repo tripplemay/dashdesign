@@ -42,6 +42,10 @@ Name: "{autodesktop}\DashDesign"; Filename: "{app}\DashDesign.exe"; Tasks: deskt
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
 
 [Run]
+; Rebuild the Windows icon cache so upgraded shortcuts show the new exe icon
+; immediately (Windows otherwise keeps the previously cached icon). Runs on
+; every install, including silent auto-updates.
+Filename: "{sys}\ie4uinit.exe"; Parameters: "-show"; Flags: runhidden skipifdoesntexist
 Filename: "{app}\DashDesign.exe"; Description: "Launch DashDesign"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
