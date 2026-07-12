@@ -188,3 +188,78 @@ class TestMainSizeOverrideGlue:
         )
         assert rebuild.main() == 0
         assert captured["size_override"] == (80, 60)
+
+
+def _profile(gpt_image_size: str = "1024x1536") -> "rebuild.ImageProfile":
+    return rebuild.ImageProfile(
+        source="poster.png",
+        source_px="900x1200",
+        target_cm="80x100",
+        print_px_at_dpi="6299x7874",
+        print_dpi=200,
+        gpt_image_size=gpt_image_size,
+        aspect_ratio=0.8,
+        dominant_palette=["#112233", "#445566", "#778899"],
+        source_effective_dpi=72.0,
+        notes=[],
+    )
+
+
+class TestEditPromptPreservesText:
+    """The GUI "图片修改" path (api_mode="edit") must keep original text, not wipe it."""
+
+    def test_edit_prompt_forbids_removing_text(self) -> None:
+        prompt = rebuild.build_visual_prompt(_profile(), "把背景换成蓝天草地", "edit")
+        lowered = prompt.lower()
+        # The bug was the old "Text policy: remove readable ..." line; it must be gone.
+        # (Note: "empty panels" still appears, but only inside the negated
+        # "do NOT replace text with empty panels" preservation clause.)
+        assert "remove readable" not in lowered
+        # And none of the legacy rebuild framing that contradicted preservation.
+        assert "rebuild the source poster" not in lowered
+        assert "clean image-model master" not in lowered
+
+    def test_edit_prompt_contains_preservation_directives(self) -> None:
+        prompt = rebuild.build_visual_prompt(_profile(), "把背景换成蓝天草地", "edit")
+        # Exact substrings the design settled on — keep these byte-stable.
+        for phrase in (
+            "PRESERVE EVERY PIECE OF TEXT EXACTLY AS IN THE SOURCE",
+            "keep 100% of everything else pixel-identical to the source",
+            "do NOT replace text with empty panels, glows, frames, or texture",
+            "targeted, surgical edit of the existing image",
+        ):
+            assert phrase in prompt, f"missing preservation phrase: {phrase!r}"
+
+    def test_edit_prompt_keeps_explicit_text_change_exception(self) -> None:
+        # A user who explicitly asks to change text must still be able to.
+        prompt = rebuild.build_visual_prompt(_profile(), "去掉左下角文字", "edit")
+        assert "THE ONLY EXCEPTION" in prompt
+
+    def test_edit_prompt_embeds_user_description(self) -> None:
+        prompt = rebuild.build_visual_prompt(_profile(), "把背景换成蓝天草地", "edit")
+        assert "把背景换成蓝天草地" in prompt
+
+    def test_edit_prompt_blank_description_becomes_no_change(self) -> None:
+        for description in (None, "", "   "):
+            prompt = rebuild.build_visual_prompt(_profile(), description, "edit")
+            assert rebuild._EDIT_NO_CHANGE_DESCRIPTION in prompt
+            # The old generic fallback would read as an open-ended redraw instruction.
+            assert "visual reference for subject, layout, mood, and color" not in prompt
+
+    def test_edit_prompt_interpolates_size_and_palette(self) -> None:
+        prompt = rebuild.build_visual_prompt(_profile("1408x1024"), "调整", "edit")
+        assert "1408x1024" in prompt
+        assert "#112233" in prompt
+
+
+class TestGeneratePromptUnchanged:
+    """Regression guard: the text-to-image / CLI rebuild path is intentionally left as-is."""
+
+    def test_generate_prompt_still_removes_text(self) -> None:
+        prompt = rebuild.build_visual_prompt(_profile(), None, "generate")
+        assert "remove readable Chinese and English text" in prompt
+        assert "Rebuild the source poster" in prompt
+
+    def test_generate_prompt_has_no_preservation_directive(self) -> None:
+        prompt = rebuild.build_visual_prompt(_profile(), None, "generate")
+        assert "PRESERVE EVERY PIECE OF TEXT EXACTLY AS IN THE SOURCE" not in prompt

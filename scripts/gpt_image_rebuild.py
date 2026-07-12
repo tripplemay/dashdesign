@@ -233,30 +233,69 @@ def build_profile(
     )
 
 
+# When the edit request is blank, description_text must not read as an
+# instruction: state plainly that nothing should change, so the whole-image
+# edit degrades to a faithful reproduction instead of an open-ended redraw.
+_EDIT_NO_CHANGE_DESCRIPTION = (
+    "No specific modification requested — reproduce the source faithfully, "
+    "leaving every element and all text unchanged."
+)
+
+
 def build_visual_prompt(
     profile: ImageProfile,
     description: str | None,
     api_mode: str,
 ) -> str:
+    palette = ", ".join(profile.dominant_palette)
+    if api_mode == "edit":
+        return _build_edit_prompt(profile, description, palette)
+    return _build_generate_prompt(profile, description, palette)
+
+
+def _build_edit_prompt(
+    profile: ImageProfile,
+    description: str | None,
+    palette: str,
+) -> str:
+    # 图片修改（/images/edits，整图无 mask）：默认保留原图上的一切——尤其是文字、
+    # 价格、logo、二维码——只应用用户"修改要求"里描述的改动。历史提示词曾指示模型
+    # 抹除文字并重建为独立图层，导致带文字的图被自动去字；这里彻底反转为"保真编辑"。
+    description_text = (description or "").strip() or _EDIT_NO_CHANGE_DESCRIPTION
+    return textwrap.dedent(
+        f"""
+        Use case: ads-marketing
+        Asset type: faithful in-place edit of the supplied print poster — the original poster with one requested change applied and every other element, above all all text, preserved unchanged.
+        Primary request: Apply ONLY the single modification requested below to the source poster, and keep 100% of everything else pixel-identical to the source. This is a targeted, surgical edit of the existing image — NOT a rebuild, redraw, cleanup, restyle, re-typeset, or reinterpretation. Every word, number, price, logo, brand mark, small label, and QR code must stay exactly as it already appears unless the requested modification below explicitly targets it. If the requested modification below is empty or is only a generic reference note, make no content change at all: return a lossless, faithful reproduction of the source with all text and layout untouched.
+        Source description: Requested change to apply — change only this, and leave everything else untouched: {description_text}
+        Input/reference policy: Treat the input image as the exact base to edit in place, not as loose inspiration or a style reference. Start from its exact pixels and alter only the region(s) the requested change strictly requires; carry over every other region — the overall layout, the background outside the edited area, the main subject, all colors, and all text blocks — unchanged from the input. Do not regenerate, reimagine, redraw, or re-typeset the poster from scratch.
+        Composition/framing: Preserve the source poster's exact composition, camera angle, main subject placement, visual hierarchy, whitespace blocks, copy-safe regions, and aspect ratio. Do not move, resize, crop, re-flow, mirror, or rearrange any zone except what the requested change strictly requires.
+        Style/medium: Match the source's existing style, medium, lighting, texture, colors, and finish exactly; do not restyle the poster. Any new pixels introduced by the requested modification must blend seamlessly into the source's original look and stay confined to the area the modification targets. Do not "improve", denoise, sharpen, recolor, or relight anything that was not requested.
+        Color palette: keep the source's existing colors exactly as they are, except where the requested modification itself requires a color change; dominant source colors for reference: {palette}.
+        Text policy: PRESERVE EVERY PIECE OF TEXT EXACTLY AS IN THE SOURCE. Keep all Chinese and English words, headlines, prices, phone numbers, dates, logos, brand marks, small UI labels, legal/production copy, and every QR code fully legible and identical — same glyphs, characters, digits, spelling, font, weight, size, color, kerning, and position. Do NOT remove, hide, blur, cover, add, translate, rewrite, correct, re-typeset, restyle, re-render, or relocate any text or QR code, and do NOT replace text with empty panels, glows, frames, or texture. Reproduce every glyph pixel-faithfully. THE ONLY EXCEPTION: if the requested modification above explicitly asks to change, replace, or remove specific text, apply exactly that instruction to that specific text alone and leave all other text and QR codes untouched.
+        Constraints: Make the smallest change that satisfies the request and change nothing the user did not explicitly request; when the requested modification is empty, change nothing at all and reproduce the source faithfully and losslessly. Above all, keep every glyph, digit, price, logo, brand mark, and QR code identical to the source unless the modification explicitly targets it. Keep the main subject position, visual hierarchy, aspect ratio, and all major layout regions unchanged; do not crop. Avoid distorted anatomy, garbled or invented typography, fake or altered logos, invented or altered QR codes, watermarks, signatures, or screenshots inside the image.
+        Output: one complete whole-image edited poster at {profile.gpt_image_size}, faithful to the source with all original text and QR codes intact, no border, no margin.
+        """
+    ).strip()
+
+
+def _build_generate_prompt(
+    profile: ImageProfile,
+    description: str | None,
+    palette: str,
+) -> str:
+    # 文生图/CLI 重建路线：沿用"生成干净底图、文字与二维码作为独立生产图层重建"的
+    # 策略，因此仍显式要求移除可读文字。GUI 恒定走 edit 分支，不经过此处。
     description_text = description or (
         "Use the supplied source preview as the visual reference for subject, layout, mood, and color."
     )
-    palette = ", ".join(profile.dominant_palette)
-    source_reference = (
-        "Use the input image as the primary composition reference. Match its spatial map closely: "
-        "large title zone at the top, main character and magical drawing scene in the center, "
-        "decorative feature/icon areas around the middle, and a clean lower zone for production copy."
-        if api_mode == "edit"
-        else "Use the supplied source preview as the visual reference for subject, layout, mood, and color."
-    )
-
     return textwrap.dedent(
         f"""
         Use case: ads-marketing
         Asset type: clean image-model master for a large-format print poster
         Primary request: Rebuild the source poster as a high-quality polished illustration master for later print production.
         Source description: {description_text}
-        Input/reference policy: {source_reference}
+        Input/reference policy: Use the supplied source preview as the visual reference for subject, layout, mood, and color.
         Composition/framing: Preserve the source poster's overall composition, camera angle, main subject placement, visual hierarchy, whitespace blocks, and copy-safe regions. Do not crop away major zones from the original poster.
         Style/medium: premium commercial AI illustration, crisp details, clean lighting, high contrast, refined edges, suitable for large-format print.
         Color palette: keep close to these dominant source colors: {palette}.
@@ -477,23 +516,39 @@ def build_package(
     _advance("写状态与完成")
     write_json(package_dir / "status.json", status)
 
+    if api_mode == "edit":
+        workflow_intro = (
+            "This package prepares an in-place image edit that keeps the source's existing text intact:"
+        )
+        step_rebuild = (
+            "The edited master already preserves the original text, logo, price, and QR code — "
+            "no separate rebuild layer is needed."
+        )
+        step_feed = "Feed the edited master into the print output stage."
+        prompt_desc = "in-place edit prompt that preserves existing text."
+    else:
+        workflow_intro = "This package prepares the creative rebuild path:"
+        step_rebuild = "Rebuild text, logo, price, and QR code as deterministic production layers."
+        step_feed = "Feed the generated master and rebuilt layers into the print output stage."
+        prompt_desc = "clean-background generation prompt."
+
     readme = textwrap.dedent(
         f"""
         # GPT Image Rebuild Package
 
         Source: `{source.name}`
 
-        This package prepares the creative rebuild path:
+        {workflow_intro}
 
         1. Use `source_preview.jpg` as the human/model reference.
         2. Review `prompt.md`.
         3. Run `./run_gpt_image_generation.sh` after setting `OPENAI_API_KEY`, or run this script again with `--execute`.
-        4. Rebuild text, logo, price, and QR code as deterministic production layers.
-        5. Feed the generated master and rebuilt layers into the print output stage.
+        4. {step_rebuild}
+        5. {step_feed}
 
         Files:
         - `profile.json`: source/target metrics and selected GPT Image master size.
-        - `prompt.md`: clean-background generation prompt.
+        - `prompt.md`: {prompt_desc}
         - `{request_name}`: Image API request fields for `gpt-image-2`.
         - `vision_prompt_request.skeleton.json`: prompt-extraction request skeleton for a vision-capable model.
         - `status.json`: current execution status.
