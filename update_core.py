@@ -8,6 +8,7 @@ headlessly and reused from worker/CLI contexts.
 from __future__ import annotations
 
 import hashlib
+import ssl
 import tempfile
 import urllib.request
 from dataclasses import dataclass
@@ -104,6 +105,25 @@ def _safe_unlink(path: Path) -> None:
         pass
 
 
+def _ssl_context() -> "ssl.SSLContext | None":
+    """Trust store for HTTPS downloads.
+
+    The frozen Windows build's default SSL context can fail to build a chain to
+    GitHub's CA ("unable to get local issuer certificate") on machines whose
+    local root store lacks the needed roots (common when Windows automatic root
+    updates are disabled) — even though the manifest fetch already succeeds via
+    ``requests``, which bundles certifi. Verify against certifi's portable CA
+    bundle here so the download trusts the same roots regardless of the machine.
+    Returns ``None`` (urllib's default) only if certifi is somehow unavailable.
+    """
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001 - certifi missing → fall back to default
+        return None
+
+
 def download_to_temp(
     url: str,
     dest: Path,
@@ -128,10 +148,12 @@ def download_to_temp(
     request = urllib.request.Request(
         url, headers={"User-Agent": f"DashDesign/{APP_VERSION}"}
     )
+    # Only HTTPS needs a trust store; file:// (tests) and other schemes ignore it.
+    context = _ssl_context() if urlsplit(url).scheme == "https" else None
     digest = hashlib.sha256()
     downloaded = 0
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
             total = _content_length(response)
             if progress_cb:
                 progress_cb(0, total)

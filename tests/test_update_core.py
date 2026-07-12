@@ -133,3 +133,52 @@ class TestDownloadToTemp:
         with pytest.raises(DownloadCancelled):
             download_to_temp(src.as_uri(), dest, should_cancel=lambda: True)
         assert not dest.exists()
+
+
+class TestSslContext:
+    def test_ssl_context_backed_by_certifi(self) -> None:
+        import ssl
+
+        from update_core import _ssl_context
+
+        context = _ssl_context()
+        assert isinstance(context, ssl.SSLContext)
+        assert context.verify_mode == ssl.CERT_REQUIRED
+
+    def test_https_download_verifies_with_certifi_context(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Fixes "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer
+        # certificate": the download must pass a certifi-backed context to
+        # urlopen, not urllib's machine-dependent default.
+        import ssl
+
+        import update_core
+
+        captured: dict[str, object] = {}
+
+        class _FakeResponse:
+            def __init__(self) -> None:
+                self._chunks = iter([b"payload", b""])
+
+            def __enter__(self) -> "_FakeResponse":
+                return self
+
+            def __exit__(self, *_exc: object) -> bool:
+                return False
+
+            def getheader(self, _name: str) -> str:
+                return "7"
+
+            def read(self, _size: int) -> bytes:
+                return next(self._chunks)
+
+        def _fake_urlopen(request: object, timeout: object = None, context: object = None):
+            captured["context"] = context
+            return _FakeResponse()
+
+        monkeypatch.setattr(update_core.urllib.request, "urlopen", _fake_urlopen)
+        dest = tmp_path / "out.bin"
+        update_core.download_to_temp("https://example.com/DashDesign-setup.exe", dest)
+        assert isinstance(captured["context"], ssl.SSLContext)
+        assert dest.read_bytes() == b"payload"
