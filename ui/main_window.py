@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -54,7 +55,7 @@ from app_runtime import (
     runtime_root,
     version_tuple,
 )
-from ui import cloud_bootstrap, commands, installer, theme
+from ui import cloud_bootstrap, commands, installer, theme, workspace
 from ui.pages import BaselinePage, BatchPage, GptPage, QrPage, TextImagePage
 from ui.progress import ProgressModel, parse_progress_line
 from ui.updater import (
@@ -89,6 +90,9 @@ class DashDesignQtApp(QMainWindow):
             self.resize(1180, 780)
         self.process: "QProcess | None" = None
         self.last_output_dir: "Path | None" = None
+        self._last_engineering_dir: "Path | None" = None  # 本次运行的工程包目录（工作区模式下）
+        self._running_worker = ""  # 正在运行的 worker token（供成品整理到工作区）
+        self._run_started_at = 0.0  # 本次运行起始墙钟时间，用于只整理本次产出的成品
         self.current_preview_path: "Path | None" = None
         self._running = False
         self._running_title = ""  # 正在运行的工作流名，进度/状态栏标注归属
@@ -237,9 +241,13 @@ class DashDesignQtApp(QMainWindow):
         self.stop_button.setObjectName("SecondaryButton")
         self.stop_button.setToolTip("停止正在运行的工作流（Ctrl+.）")
         self.open_output_button = self._button("打开输出", self.open_last_output)
+        self.open_engineering_button = self._button("打开工程文件", self.open_engineering)
+        self.open_engineering_button.setToolTip("打开本次运行的中间文件（提示词、请求、母版等）所在目录。")
+        self.open_engineering_button.setVisible(workspace.is_active())
         header.addWidget(self.run_button)
         header.addWidget(self.stop_button)
         header.addWidget(self.open_output_button)
+        header.addWidget(self.open_engineering_button)
         work_layout.addLayout(header)
 
         self.banner = InfoBanner()
@@ -546,6 +554,9 @@ class DashDesignQtApp(QMainWindow):
         self._progress = ProgressModel()
         self.progress_panel.reset()
         self.last_output_dir = output_dir
+        self._last_engineering_dir = output_dir
+        self._running_worker = command[command.index("--worker") + 1] if "--worker" in command else ""
+        self._run_started_at = time.time()
         self._running_title = self._PAGE_TITLES[self.nav.currentRow()][0]
         self._capture("$ " + " ".join(command))
         self._set_running(True)
@@ -645,14 +656,21 @@ class DashDesignQtApp(QMainWindow):
         workflow = self._running_title or "工作流"
         if success:
             self.statusBar().showMessage(f"完成 · 用时 {elapsed}")
+            moved = self._collect_to_workspace()
+            message = f"{workflow}运行完成，用时 {elapsed}。"
+            if moved:
+                message += f"已整理 {len(moved)} 张成品图到工作区。"
             self.banner.show_message(
                 "success",
-                f"{workflow}运行完成，用时 {elapsed}。",
+                message,
                 action_label="打开输出目录",
                 action_callback=self.open_last_output,
                 timeout_ms=8000,
             )
-            self.preview_recent_output()
+            if moved:
+                self.load_preview(moved[0])
+            else:
+                self.preview_recent_output()
         else:
             self.statusBar().showMessage(f"失败 · 退出码 {exit_code}")
             tail = self._stderr_tail[-1] if self._stderr_tail else ""
@@ -758,11 +776,43 @@ class DashDesignQtApp(QMainWindow):
             )
         self.load_preview(path)
 
+    def _collect_to_workspace(self) -> "list[Path]":
+        """Move a finished run's deliverable image(s) into the workspace.
+
+        No-op (returns []) when no workspace is set. On success, retargets the
+        "打开输出" button to the workspace category folder while remembering the
+        engineering package dir for "打开工程文件".
+        """
+        if not workspace.is_active() or self.last_output_dir is None or not self._running_worker:
+            return []
+        search_root = workspace.normalize_search_root(
+            self._progress.done_label, self.last_output_dir
+        )
+        self._last_engineering_dir = search_root
+        root = workspace.load_workspace_root()
+        try:
+            moved = workspace.export_run(
+                self._running_worker, search_root, root, min_mtime=self._run_started_at
+            )
+        except OSError as exc:
+            self._capture(f"[warn] 整理成品到工作区失败：{exc}")
+            return []
+        if moved:
+            category = workspace.CATEGORY_BY_WORKER.get(self._running_worker, "")
+            self.last_output_dir = Path(root) / category
+        return moved
+
     def open_last_output(self) -> None:
         if self.last_output_dir is None:
             self.banner.show_message("info", "还没有运行过工作流。", timeout_ms=4000)
             return
         open_path(self, self.last_output_dir)
+
+    def open_engineering(self) -> None:
+        if self._last_engineering_dir is None:
+            self.banner.show_message("info", "还没有运行过工作流。", timeout_ms=4000)
+            return
+        open_path(self, self._last_engineering_dir)
 
     def check_for_updates(self, silent: bool = False) -> None:
         # 主源优先 VPS（app-config 下发的 update_manifest_url，国内可达），
@@ -926,6 +976,14 @@ class DashDesignQtApp(QMainWindow):
         # 外观是实时预览、云端/本机配置由对话框内各自的保存按钮独立提交，
         # 关闭对话框本身不"保存"任何东西，因此不再弹"设置已保存"误导用户。
         SettingsDialog(self).exec()
+        # 工作区可能在对话框里被改动，重新应用到各页面（隐藏/显示输出目录）。
+        self._refresh_workspace_ui()
+
+    def _refresh_workspace_ui(self) -> None:
+        for page in self.pages:
+            if hasattr(page, "refresh_workspace"):
+                page.refresh_workspace()
+        self.open_engineering_button.setVisible(workspace.is_active())
 
     def show_about(self) -> None:
         QMessageBox.information(
@@ -955,6 +1013,8 @@ class DashDesignQtApp(QMainWindow):
         for page in self.pages:
             if hasattr(page, "restore_settings"):
                 page.restore_settings(settings)
+        # 恢复各页设置后再应用一次工作区状态（隐藏/显示输出目录、按钮可见性）。
+        self._refresh_workspace_ui()
         row = settings.value("window/nav_row", 0, type=int)
         if 0 <= row < self.nav.count():
             self.nav.setCurrentRow(row)

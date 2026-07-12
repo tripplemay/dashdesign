@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui import workspace
 from ui.output_paths import default_output, restore_output
 from ui.commands import QrForm
 from ui.utils import scrollable_page_layout
@@ -32,8 +33,12 @@ class QrPage(QWidget):
         path_layout = QVBoxLayout(paths)
         self.qr_input = PathField("输入图片", "", "file", placeholder="拖入或选择需要清除二维码的图片")
         self.qr_output = PathField("输出目录", default_output("single_no_qr_desktop_qt"), "dir")
+        self.workspace_note = QLabel("已启用工作区：成品图自动保存到「工作区 / 去二维码」。")
+        self.workspace_note.setObjectName("Subtitle")
+        self.workspace_note.setWordWrap(True)
         path_layout.addWidget(self.qr_input)
         path_layout.addWidget(self.qr_output)
+        path_layout.addWidget(self.workspace_note)
         layout.addWidget(paths)
 
         params = QGroupBox("清除区域")
@@ -76,6 +81,10 @@ class QrPage(QWidget):
         params_layout.setColumnStretch(1, 1)
         layout.addWidget(params)
         layout.addStretch(1)
+        self.refresh_workspace()
+
+    def refresh_workspace(self) -> None:
+        workspace.apply_output_field(self.qr_output, self.workspace_note)
 
     def apply_selection(self, rect: QRect, source_size: QSize) -> None:
         self.qr_box.setText(
@@ -86,7 +95,10 @@ class QrPage(QWidget):
     def form(self) -> QrForm:
         return QrForm(
             source=self.qr_input.text(),
-            output_dir=self.qr_output.text(),
+            output_dir=workspace.effective_output_dir(
+                default_output("single_no_qr_desktop_qt"),
+                self.qr_output.text(),
+            ),
             box=self.qr_box.text(),
             reference_size=self.qr_reference_size.text(),
             margin=str(self.qr_margin.value()),

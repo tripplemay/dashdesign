@@ -8,6 +8,8 @@ password, edits it, and uploads it; every client picks it up on the next fetch.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
@@ -25,7 +27,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui import api_config, cloud_bootstrap, theme
+from ui import api_config, cloud_bootstrap, theme, workspace
+from ui.widgets.path_field import PathField
 
 _THEME_MODES = (("system", "跟随系统"), ("light", "浅色"), ("dark", "深色"))
 
@@ -45,6 +48,7 @@ class SettingsDialog(QDialog):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(12)
         content_layout.addWidget(self._build_appearance_group())
+        content_layout.addWidget(self._build_workspace_group())
         if not cloud_bootstrap.is_configured():
             # 非云端（dev / 自托管）才显示本机 API 配置；云端模式下密钥由
             # 管理员统一下发，普通用户无需也不该在本机各填一份。
@@ -95,6 +99,60 @@ class SettingsDialog(QDialog):
         manager = theme.manager()
         if manager is not None:
             manager.set_mode(mode)
+
+    # -- workspace (everyone) ------------------------------------------
+    def _build_workspace_group(self) -> QGroupBox:
+        group = QGroupBox("工作区")
+        box = QVBoxLayout(group)
+        hint = QLabel(
+            "设定一个工作区文件夹后，各工作流不再单独设置输出目录：生成的成品图片会自动"
+            "按类别（文生图 / 整图海报 / 图片修改 / 去二维码 / 批量印刷）整理到其中，"
+            "文件夹里只放图片，方便查找。中间文件另存到程序目录，不干扰工作区。"
+        )
+        hint.setObjectName("Subtitle")
+        hint.setWordWrap(True)
+        box.addWidget(hint)
+        self.workspace_field = PathField(
+            "工作区目录",
+            workspace.load_workspace_root(),
+            "dir",
+            placeholder="选择一个用来存放成品图片的文件夹",
+        )
+        box.addWidget(self.workspace_field)
+        row = QHBoxLayout()
+        save_btn = QPushButton("保存工作区")
+        save_btn.clicked.connect(self._save_workspace)
+        clear_btn = QPushButton("清除")
+        clear_btn.setToolTip("清除后恢复为各工作流单独设置输出目录。")
+        clear_btn.clicked.connect(self._clear_workspace)
+        row.addWidget(save_btn)
+        row.addWidget(clear_btn)
+        row.addStretch(1)
+        box.addLayout(row)
+        self.workspace_status = QLabel("")
+        self.workspace_status.setObjectName("Subtitle")
+        self.workspace_status.setWordWrap(True)
+        box.addWidget(self.workspace_status)
+        return group
+
+    def _save_workspace(self) -> None:
+        path = self.workspace_field.text().strip()
+        if not path:
+            self.workspace_status.setText("请先选择一个工作区文件夹。")
+            return
+        target = Path(path).expanduser()
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self.workspace_status.setText(f"无法创建该文件夹：{exc}")
+            return
+        workspace.save_workspace_root(str(target))
+        self.workspace_status.setText("已保存。成品图片将自动整理到该工作区，立即生效。")
+
+    def _clear_workspace(self) -> None:
+        workspace.save_workspace_root("")
+        self.workspace_field.setText("")
+        self.workspace_status.setText("已清除。各工作流恢复单独设置输出目录。")
 
     # -- local API override (dev / self-hosted, no cloud) ----------------
     def _build_local_api_group(self) -> QGroupBox:

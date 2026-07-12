@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.output_paths import default_output, restore_output
-from ui import api_config
+from ui import api_config, workspace
 from ui.commands import GptForm
 from ui.print_size import suggest_print_size_cm
 from ui.utils import scrollable_page_layout
@@ -39,6 +39,10 @@ class GptPage(QWidget):
         )
         path_layout.addWidget(self.gpt_source)
         path_layout.addWidget(self.gpt_output)
+        self.workspace_note = QLabel("已启用工作区：成品图自动保存到「工作区 / 图片修改」。")
+        self.workspace_note.setObjectName("Subtitle")
+        self.workspace_note.setWordWrap(True)
+        path_layout.addWidget(self.workspace_note)
         layout.addWidget(paths)
 
         settings_group = QGroupBox("修改设置")
@@ -88,6 +92,10 @@ class GptPage(QWidget):
         settings_layout.setColumnStretch(1, 1)
         layout.addWidget(settings_group)
         layout.addStretch(1)
+        self.refresh_workspace()
+
+    def refresh_workspace(self) -> None:
+        workspace.apply_output_field(self.gpt_output, self.workspace_note)
 
     def _prefill_size_from_source(self, text: str) -> None:
         source = text.strip()
@@ -114,7 +122,10 @@ class GptPage(QWidget):
     def form(self) -> GptForm:
         return GptForm(
             source=self.gpt_source.text(),
-            output_dir=self.gpt_output.text(),
+            output_dir=workspace.effective_output_dir(
+                default_output("workflow_samples", "desktop_gpt_image_rebuild_qt"),
+                self.gpt_output.text(),
+            ),
             width_cm=str(self.gpt_width_cm.value()),
             height_cm=str(self.gpt_height_cm.value()),
             dpi=str(self.gpt_dpi.value()),

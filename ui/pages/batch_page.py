@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from app_runtime import first_image, runtime_tool_path
 from ui import theme
+from ui import workspace
 from ui.output_paths import default_output, restore_output
 from ui.commands import BatchForm
 from ui.utils import scrollable_page_layout
@@ -66,8 +67,12 @@ class BatchPage(QWidget):
             placeholder="选择包含源图片的目录（文件名需含尺寸，如 200乘以80）",
         )
         self.batch_output = PathField("输出目录", default_output("print_ready_desktop_qt"), "dir")
+        self.workspace_note = QLabel("已启用工作区：成品图自动保存到「工作区 / 批量印刷」。")
+        self.workspace_note.setObjectName("Subtitle")
+        self.workspace_note.setWordWrap(True)
         path_layout.addWidget(self.batch_input)
         path_layout.addWidget(self.batch_output)
+        path_layout.addWidget(self.workspace_note)
         hint = QLabel(
             "仅处理 jpg/jpeg/png；物理尺寸从文件名解析（如“200乘以80”或“200x80”= 200cm×80cm），请勿改名。"
             "文生图产物目录（含 print_spec.json）可直接选择，master.png 无需改名。"
@@ -123,6 +128,10 @@ class BatchPage(QWidget):
         option_layout.setColumnStretch(1, 1)
         layout.addWidget(options)
         layout.addStretch(1)
+        self.refresh_workspace()
+
+    def refresh_workspace(self) -> None:
+        workspace.apply_output_field(self.batch_output, self.workspace_note)
 
     def _refresh_tool_status(self) -> None:
         if runtime_tool_path().exists():
@@ -178,7 +187,8 @@ class BatchPage(QWidget):
         # 有文件被跳过时才需要用户确认，且默认按钮为"否"防回车误触。
         if not self.batch_force.isChecked() and not skipped:
             return True
-        message = f"将处理 {count} 张图片，输出到：\n{self.batch_output.text()}"
+        target = "工作区 / 批量印刷" if workspace.is_active() else self.batch_output.text()
+        message = f"将处理 {count} 张图片，输出到：\n{target}"
         if skipped:
             message += f"\n\n另有 {skipped} 张图片文件名不含尺寸（如“200乘以80”），将被跳过。"
         if self.batch_force.isChecked():
@@ -195,7 +205,10 @@ class BatchPage(QWidget):
     def form(self) -> BatchForm:
         return BatchForm(
             input_dir=self.batch_input.text(),
-            output_dir=self.batch_output.text(),
+            output_dir=workspace.effective_output_dir(
+                default_output("print_ready_desktop_qt"),
+                self.batch_output.text(),
+            ),
             style_mode=self.style_radio.isChecked(),
             dpi=str(self.batch_dpi.value()),
             only=self.batch_only.text(),

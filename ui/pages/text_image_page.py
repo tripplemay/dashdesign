@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui import workspace
 from ui.output_paths import default_output, restore_output
 from ui import api_config, baseline_service
 from ui.commands import TextImageForm
@@ -253,7 +254,11 @@ class TextImagePage(QWidget):
         self.baseline_label.setObjectName("Subtitle")
         self.baseline_label.setWordWrap(True)
         self.baseline_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.workspace_note = QLabel("已启用工作区：成品图自动保存到「工作区」（文生图 / 整图海报）。")
+        self.workspace_note.setObjectName("Subtitle")
+        self.workspace_note.setWordWrap(True)
         path_layout.addWidget(self.t2i_output)
+        path_layout.addWidget(self.workspace_note)
         path_layout.addWidget(self.baseline_label)
         layout.addWidget(paths)
 
@@ -262,6 +267,10 @@ class TextImagePage(QWidget):
         self._activeBaselineReady.connect(self._apply_active_baseline)
         self.refresh_active_baseline()
         self.sync_text_image_mode()
+        self.refresh_workspace()
+
+    def refresh_workspace(self) -> None:
+        workspace.apply_output_field(self.t2i_output, self.workspace_note)
 
     def refresh_active_baseline(self) -> None:
         """异步解析当前项目基线（走网络），避免切到本页时卡住 UI。"""
@@ -330,7 +339,10 @@ class TextImagePage(QWidget):
 
     def form(self) -> TextImageForm:
         return TextImageForm(
-            output_dir=self.t2i_output.text(),
+            output_dir=workspace.effective_output_dir(
+                default_output("workflow_samples", "text_to_image_print_qt"),
+                self.t2i_output.text(),
+            ),
             baseline_path=str(baseline_service.active_baseline_path()),
             prompt=self.t2i_prompt.toPlainText(),
             mode=str(self.t2i_mode.currentData() or "background"),
