@@ -27,7 +27,7 @@ from prepare_print_assets import (
     aspect_delta_percent,
     enhance,
     fit_with_blurred_background,
-    run_realesrgan,
+    run_realesrgan_with_retry,
     save_print_image,
     target_pixels,
 )
@@ -1237,7 +1237,9 @@ def _superres_master(
         return master_path, False
     sr_path = master_path.parent / "_sr" / f"{master_path.stem}_realesrgan_x4.png"
     try:
-        run_realesrgan(master_path, sr_path, Path(realesrgan_binary), Path(realesrgan_model_dir), realesrgan_model)
+        run_realesrgan_with_retry(
+            master_path, sr_path, Path(realesrgan_binary), Path(realesrgan_model_dir), realesrgan_model
+        )
     except Exception as exc:  # noqa: BLE001 - 超分失败退回 PIL，不阻断出图
         print(f"[warn] Real-ESRGAN 超分失败，回退基础缩放：{exc}", file=sys.stderr)
         return master_path, False

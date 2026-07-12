@@ -15,6 +15,7 @@ import gc
 import json
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -86,6 +87,10 @@ def effective_dpi(spec: SourceSpec) -> float:
 SR_MAX_INPUT_EDGE = 4300
 SR_MAX_INPUT_PIXELS = 12_000_000
 
+# 超分崩溃（Windows 退出码 3221225477 = 0xC0000005 访问越界）多为显存吃紧或
+# 驱动不稳定，用更小的分块重试往往能成功；逐级缩小，仍失败才让调用方回退。
+SR_TILE_SIZES = (512, 256, 128)
+
 
 def run_realesrgan(
     source: Path,
@@ -108,6 +113,51 @@ def run_realesrgan(
         command, check=True, timeout=timeout,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
+
+
+def run_realesrgan_with_retry(
+    source: Path,
+    destination: Path,
+    binary: Path,
+    model_dir: Path,
+    model: str = "realesrgan-x4plus",
+    thread_counts: str = "1:1:1",
+    timeout: int = 900,
+    tile_sizes: tuple[int, ...] = SR_TILE_SIZES,
+) -> None:
+    """Real-ESRGAN x4 with progressive tile shrinking on crash.
+
+    A native crash (nonzero exit, e.g. Windows access violation 3221225477)
+    usually means the GPU ran out of memory or the driver misbehaved on a large
+    tile — a smaller tile often succeeds. Retries down ``tile_sizes`` and, only
+    after every tile fails, re-raises the last ``CalledProcessError`` so the
+    caller can still fall back to plain scaling. ``TimeoutExpired`` is not
+    retried: a smaller tile cannot fix a wall-clock timeout.
+    """
+    last_error: subprocess.CalledProcessError | None = None
+    for tile_size in tile_sizes:
+        try:
+            run_realesrgan(
+                source,
+                destination,
+                binary,
+                model_dir,
+                model=model,
+                tile_size=tile_size,
+                thread_counts=thread_counts,
+                timeout=timeout,
+            )
+            return
+        except subprocess.CalledProcessError as exc:
+            last_error = exc
+            print(
+                f"[warn] Real-ESRGAN tile={tile_size} 崩溃（退出码 {exc.returncode}），"
+                "改用更小分块重试。",
+                file=sys.stderr,
+            )
+    if last_error is not None:
+        raise last_error
+    raise ValueError("tile_sizes 不能为空")
 
 
 def aspect_delta_percent(source_size: tuple[int, int], target_size: tuple[int, int]) -> float:
