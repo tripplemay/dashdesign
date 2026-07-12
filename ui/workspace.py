@@ -135,6 +135,31 @@ def discover_deliverables(worker: str, search_root: Path) -> list[Path]:
     return []
 
 
+def resolve_open_target(workspace_root: str, last_output_dir: "Path | None") -> "Path | None":
+    """Where the "打开输出" button should open.
+
+    In workspace mode "输出" means the image workspace, never the hidden
+    engineering cache: return the last run's category folder when it is inside
+    the workspace and exists, otherwise the workspace root. Without a workspace,
+    fall back to ``last_output_dir`` unchanged (legacy behavior). This fixes the
+    case where the field still points at the cache (no run yet this session, or a
+    stale ``window/last_output_dir`` restored from a pre-workspace session).
+    """
+    if not workspace_root:
+        return last_output_dir
+    root = Path(workspace_root)
+    if last_output_dir is not None:
+        try:
+            resolved = last_output_dir.resolve()
+            resolved_root = root.resolve()
+            within = resolved == resolved_root or resolved_root in resolved.parents
+        except OSError:
+            within = False
+        if within and last_output_dir.exists():
+            return last_output_dir
+    return root
+
+
 def normalize_search_root(done_label: str, fallback: Path) -> Path:
     """Resolve the directory to search for deliverables after a run.
 

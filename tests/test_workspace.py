@@ -167,6 +167,42 @@ class TestApplyOutputField:
         assert workspace.discover_deliverables("qr", tmp_path / "nope") == []
 
 
+class TestResolveOpenTarget:
+    def test_no_workspace_returns_last_output_unchanged(self, tmp_path: Path) -> None:
+        eng = tmp_path / "cache" / "text_to_image_print_qt"
+        eng.mkdir(parents=True)
+        assert workspace.resolve_open_target("", eng) == eng
+
+    def test_no_workspace_none_stays_none(self) -> None:
+        assert workspace.resolve_open_target("", None) is None
+
+    def test_workspace_keeps_last_output_when_inside_and_exists(self, tmp_path: Path) -> None:
+        ws = tmp_path / "工作区"
+        category = ws / "文生图"
+        category.mkdir(parents=True)
+        assert workspace.resolve_open_target(str(ws), category) == category
+
+    def test_workspace_redirects_engineering_path_to_root(self, tmp_path: Path) -> None:
+        # The reported bug: last_output_dir points at the hidden cache → open the
+        # workspace, never the engineering directory.
+        ws = tmp_path / "工作区"
+        ws.mkdir()
+        eng = tmp_path / "cache" / "text_to_image_print_qt"
+        eng.mkdir(parents=True)
+        assert workspace.resolve_open_target(str(ws), eng) == ws
+
+    def test_workspace_none_last_output_returns_root(self, tmp_path: Path) -> None:
+        ws = tmp_path / "工作区"
+        ws.mkdir()
+        assert workspace.resolve_open_target(str(ws), None) == ws
+
+    def test_workspace_category_not_yet_created_falls_back_to_root(self, tmp_path: Path) -> None:
+        ws = tmp_path / "工作区"
+        ws.mkdir()
+        missing_category = ws / "整图海报"  # not created (run produced nothing)
+        assert workspace.resolve_open_target(str(ws), missing_category) == ws
+
+
 class TestNormalizeSearchRoot:
     def test_file_done_label_resolves_to_parent(self, tmp_path: Path) -> None:
         # qr reports the output FILE, not a directory.

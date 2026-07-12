@@ -803,10 +803,15 @@ class DashDesignQtApp(QMainWindow):
         return moved
 
     def open_last_output(self) -> None:
-        if self.last_output_dir is None:
+        # 工作区模式下"打开输出"始终指向工作区（成品图），绝不指向隐藏工程缓存，
+        # 即使本次会话尚未运行、或恢复了旧的工程缓存路径。
+        target = workspace.resolve_open_target(
+            workspace.load_workspace_root(), self.last_output_dir
+        )
+        if target is None:
             self.banner.show_message("info", "还没有运行过工作流。", timeout_ms=4000)
             return
-        open_path(self, self.last_output_dir)
+        open_path(self, target)
 
     def open_engineering(self) -> None:
         if self._last_engineering_dir is None:
