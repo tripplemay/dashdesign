@@ -27,6 +27,7 @@ from prepare_print_assets import (
     discover_sources,
     effective_dpi,
     enhance,
+    fit_within,
     save_print_image,
     target_pixels,
 )
@@ -89,29 +90,9 @@ def fit_to_print_size(
     if abs(delta) <= aspect_tolerance:
         return image.resize(target_size, Image.Resampling.LANCZOS), "resized", target_size
 
-    target_width, target_height = target_size
-    background = ImageOps.fit(
-        image,
-        target_size,
-        method=Image.Resampling.LANCZOS,
-        centering=(0.5, 0.5),
-    )
-    blur_radius = max(18, int(max(target_size) * 0.018))
-    background = background.filter(ImageFilter.GaussianBlur(radius=blur_radius))
-    background = ImageEnhance.Contrast(background).enhance(0.82)
-    background = ImageEnhance.Brightness(background).enhance(0.86)
-
-    scale = min(target_width / image.width, target_height / image.height)
-    content_size = (
-        max(1, int(round(image.width * scale))),
-        max(1, int(round(image.height * scale))),
-    )
-    content = image.resize(content_size, Image.Resampling.LANCZOS)
-    x = (target_width - content_size[0]) // 2
-    y = (target_height - content_size[1]) // 2
-    background.paste(content, (x, y))
-    content.close()
-    return background, "centered_with_blurred_background", content_size
+    # 比例不匹配时等比缩放到适应目标框，按适应后尺寸输出（不补边、不裁切、不变形）。
+    fitted, fitted_size = fit_within(image, target_size)
+    return fitted, "proportional", fitted_size
 
 
 def final_polish(image: Image.Image, backend: str) -> Image.Image:
@@ -203,7 +184,7 @@ def process_one(spec: SourceSpec, args: argparse.Namespace) -> dict[str, str | i
         "review": str(review_path),
         "target_cm": f"{spec.width_cm}x{spec.height_cm}",
         "source_px": f"{spec.source_width}x{spec.source_height}",
-        "output_px": f"{target_size[0]}x{target_size[1]}",
+        "output_px": f"{content_size[0]}x{content_size[1]}",
         "content_px": f"{content_size[0]}x{content_size[1]}",
         "source_effective_dpi": round(effective_dpi(spec), 1),
         "target_dpi": args.dpi,
@@ -232,7 +213,7 @@ def write_report(rows: list[dict[str, str | int | float]], output_dir: Path, dpi
 
     sr_count = sum(1 for row in rows if row["backend"] == "realesrgan_x4plus")
     fallback_count = len(rows) - sr_count
-    ratio_adjusted = sum(1 for row in rows if row["layout"] == "centered_with_blurred_background")
+    ratio_adjusted = sum(1 for row in rows if row["layout"] == "proportional")
 
     lines = [
         "# Style-Preserved Print Batch",
@@ -272,7 +253,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-dir", type=Path, default=Path("."))
     parser.add_argument("--output-dir", type=Path, default=Path("print_ready_v3_style_preserved_no_qr_rebuild_200dpi"))
     parser.add_argument("--dpi", type=int, default=200)
-    parser.add_argument("--aspect-tolerance", type=float, default=0.5)
+    parser.add_argument("--aspect-tolerance", type=float, default=1.5)
     parser.add_argument("--review-max-edge", type=int, default=1600)
     parser.add_argument("--realesrgan-binary", type=Path, default=Path("tools/realesrgan-ncnn-vulkan"))
     parser.add_argument("--realesrgan-model-dir", type=Path, default=Path("tools/models"))

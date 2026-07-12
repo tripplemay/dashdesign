@@ -197,6 +197,28 @@ def fit_with_blurred_background(
     return background, content_size
 
 
+def fit_within(
+    image: Image.Image,
+    target_size: tuple[int, int],
+) -> tuple[Image.Image, tuple[int, int]]:
+    """Scale ``image`` proportionally to fit inside ``target_size`` — no padding,
+    no crop, no distortion.
+
+    Returns the resized image and its ``(width, height)``. The result keeps the
+    source aspect ratio: it fills the target on one axis and is smaller on the
+    other, so a declared print size whose aspect differs from the source no
+    longer gets a blurred/letterbox border — it is simply enlarged proportionally
+    (成品以声明尺寸为上限，某一边可能略小于声明值).
+    """
+    target_width, target_height = target_size
+    scale = min(target_width / image.width, target_height / image.height)
+    fitted = (
+        max(1, int(round(image.width * scale))),
+        max(1, int(round(image.height * scale))),
+    )
+    return image.resize(fitted, Image.Resampling.LANCZOS), fitted
+
+
 def enhance(image: Image.Image) -> Image.Image:
     image = ImageEnhance.Contrast(image).enhance(1.025)
     image = ImageEnhance.Color(image).enhance(1.015)
@@ -246,8 +268,9 @@ def process_one(
         layout = "resized"
         content_size = target_size
     else:
-        prepared, content_size = fit_with_blurred_background(image, target_size)
-        layout = "centered_with_blurred_background"
+        # 比例不匹配时等比缩放到适应目标框，按适应后尺寸输出（不补边、不裁切、不变形）。
+        prepared, content_size = fit_within(image, target_size)
+        layout = "proportional"
 
     prepared = enhance(prepared)
     save_print_image(prepared, output_path, dpi, icc_profile)
@@ -257,7 +280,8 @@ def process_one(
         "output": str(output_path),
         "target_cm": f"{spec.width_cm}x{spec.height_cm}",
         "source_px": f"{spec.source_width}x{spec.source_height}",
-        "output_px": f"{target_size[0]}x{target_size[1]}",
+        # 成品实际像素 = 输出像素（等比适应后无填充，二者一致）。
+        "output_px": f"{content_size[0]}x{content_size[1]}",
         "content_px": f"{content_size[0]}x{content_size[1]}",
         "source_effective_dpi": round(effective_dpi(spec), 1),
         "target_dpi": dpi,
@@ -328,7 +352,7 @@ def write_report(
     mismatched = [
         row
         for row in rows
-        if row["layout"] == "centered_with_blurred_background"
+        if row["layout"] == "proportional"
     ]
     low_dpi = [
         row
