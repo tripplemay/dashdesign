@@ -170,8 +170,33 @@ def resolve_physical_size(source: Path) -> tuple[int | float, int | float] | Non
     return None
 
 
-def build_profile(source: Path, print_dpi: int) -> ImageProfile:
-    size = resolve_physical_size(source)
+def resolve_size_override(
+    width_cm: float | None,
+    height_cm: float | None,
+) -> tuple[int | float, int | float] | None:
+    """Validate an explicit physical-size override from the caller.
+
+    Returns ``None`` when neither dimension is given (fall back to inference),
+    a normalized ``(width, height)`` tuple when both are valid, and raises
+    ``ValueError`` when only one is given or a value is non-positive. Normalizing
+    here keeps the tuple shape identical to ``resolve_physical_size`` (80.0 → 80).
+    """
+    if width_cm is None and height_cm is None:
+        return None
+    if width_cm is None or height_cm is None:
+        raise ValueError("--width-cm 与 --height-cm 必须同时提供")
+    if width_cm <= 0 or height_cm <= 0:
+        raise ValueError("--width-cm/--height-cm 必须为正数")
+    return _normalize_cm(width_cm), _normalize_cm(height_cm)
+
+
+def build_profile(
+    source: Path,
+    print_dpi: int,
+    size_override: tuple[int | float, int | float] | None = None,
+) -> ImageProfile:
+    # 显式 override 优先于文件名/print_spec/目录名推断（override 恒为非空二元组，短路安全）。
+    size = size_override or resolve_physical_size(source)
     if not size:
         raise ValueError(
             "无法确定物理尺寸：源图文件名未包含尺寸标记（如 80乘80），"
@@ -361,6 +386,7 @@ def build_package(
     description: str | None,
     execute: bool,
     api_mode: str,
+    size_override: tuple[int | float, int | float] | None = None,
 ) -> Path:
     _stages = ["解析源图", "生成预览与请求包"]
     if execute:
@@ -373,7 +399,7 @@ def build_package(
             progress.stage(_stages.index(label) + 1)
 
     _advance("解析源图")
-    profile = build_profile(source, print_dpi)
+    profile = build_profile(source, print_dpi, size_override)
     package_dir = output_dir / f"{slugify_filename(source.name)}_{api_mode}"
     package_dir.mkdir(parents=True, exist_ok=True)
 
@@ -490,6 +516,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--print-dpi", type=int, default=200)
     parser.add_argument(
+        "--width-cm",
+        type=float,
+        default=None,
+        help=(
+            "目标物理宽度(cm)。需与 --height-cm 同时提供；两者都给出时覆盖"
+            "文件名/print_spec/目录名推断。"
+        ),
+    )
+    parser.add_argument(
+        "--height-cm",
+        type=float,
+        default=None,
+        help="目标物理高度(cm)。需与 --width-cm 同时提供。",
+    )
+    parser.add_argument(
         "--description",
         help="Optional human-authored description to seed the rebuild prompt.",
     )
@@ -508,7 +549,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    try:
+        size_override = resolve_size_override(args.width_cm, args.height_cm)
+    except ValueError as exc:
+        parser.error(str(exc))
     package_dir = build_package(
         args.source.resolve(),
         args.output_dir.resolve(),
@@ -516,6 +562,7 @@ def main() -> int:
         args.description,
         args.execute,
         args.api_mode,
+        size_override,
     )
     print(f"Package written to {package_dir}")
     return 0

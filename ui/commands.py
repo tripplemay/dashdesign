@@ -204,6 +204,8 @@ def build_batch_command(form: BatchForm):
 class GptForm:
     source: str
     output_dir: str
+    width_cm: str
+    height_cm: str
     dpi: str
     description: str
     base_url: str
@@ -215,6 +217,13 @@ def build_gpt_command(form: GptForm):
     output_dir = Path(form.output_dir).expanduser()
     if not source.exists():
         raise ValueError("源图片不存在")
+    try:
+        width_cm = float(form.width_cm.strip())
+        height_cm = float(form.height_cm.strip())
+    except ValueError as exc:
+        raise ValueError("宽、高必须是数字") from exc
+    if width_cm <= 0 or height_cm <= 0:
+        raise ValueError("宽、高必须大于 0")
     command = [
         *worker_prefix(),
         "gpt",
@@ -223,6 +232,11 @@ def build_gpt_command(form: GptForm):
         str(output_dir),
         "--print-dpi",
         form.dpi.strip(),
+        # 显式传成品尺寸，worker 不必再从文件名/print_spec 推断（修复"无法确定物理尺寸"）。
+        "--width-cm",
+        str(width_cm),
+        "--height-cm",
+        str(height_cm),
         # 图片修改只保留"编辑原图"（/images/edits）；worker 仍支持 generate，
         # 仅供 CLI，GUI 恒定传 edit。
         "--api-mode",

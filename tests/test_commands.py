@@ -197,6 +197,8 @@ class TestGptCommand:
         base = GptForm(
             source=str(source),
             output_dir="/tmp/gpt-out",
+            width_cm="120",
+            height_cm="80",
             dpi="200",
             description="",
             base_url="",
@@ -230,6 +232,26 @@ class TestGptCommand:
         assert command[command.index("--description") + 1] == "重绘背景"
         assert "--execute" in command
         assert env == {"OPENAI_API_KEY": "sk-2"}
+
+    def test_size_flags_forwarded(self, tmp_path: Path) -> None:
+        source = tmp_path / "poster.jpg"
+        source.write_bytes(b"fake")
+        command, _, _ = build_gpt_command(self.gpt_form(source))
+        # 显式尺寸让 worker 不再依赖文件名/print_spec 推断（修复"无法确定物理尺寸"）。
+        assert command[command.index("--width-cm") + 1] == "120.0"
+        assert command[command.index("--height-cm") + 1] == "80.0"
+
+    def test_non_numeric_size_rejected(self, tmp_path: Path) -> None:
+        source = tmp_path / "poster.jpg"
+        source.write_bytes(b"fake")
+        with pytest.raises(ValueError, match="必须是数字"):
+            build_gpt_command(self.gpt_form(source, width_cm="abc"))
+
+    def test_non_positive_size_rejected(self, tmp_path: Path) -> None:
+        source = tmp_path / "poster.jpg"
+        source.write_bytes(b"fake")
+        with pytest.raises(ValueError, match="大于 0"):
+            build_gpt_command(self.gpt_form(source, height_cm="0"))
 
 
 class TestQrCommand:
