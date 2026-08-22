@@ -3,7 +3,7 @@
 > **状态（2026-07-10）：VPS 端 + GitHub Secrets 已配置完成。** updates 目录
 > `/var/www/dashdesign-updates`、`deploy` 用户 + CI 公钥、nginx `location /updates/`
 > 均已就绪（`https://dash.vpanel.cc/updates/` 200 验证通过）；6 个 secret 已设。
-> 剩余：发一版 → CI 自动镜像 → admin 在 App 里填「更新地址」。以下为完整参考/复现步骤。
+> 新版客户端会把该镜像作为内置主源；旧版仍可通过云端配置切换。
 
 让无法访问 GitHub 的用户也能检查/下载更新：客户端从 VPS（`dash.vpanel.cc`，
 Cloudflare 代理、国内可达）拉 `update-manifest.json` 与安装包；GitHub 作运行时回退。
@@ -71,11 +71,11 @@ chmod 600 /home/deploy/.ssh/authorized_keys
 | `VPS_UPDATES_DIR` | `/var/www/dashdesign-updates` | 与 nginx alias 一致 |
 | `VPS_UPDATES_BASE_URL` | `https://dash.vpanel.cc/updates` | manifest 里安装包的下载前缀（走 CF） |
 
-## 客户端切源（管理员，一次）
+## 旧版客户端切源（管理员，一次）
 
-发一版带这些改动的客户端后：**设置 → 云端配置 → 解锁 → 「更新地址」**填
+在还没有内置 VPS 主源的旧版客户端中：**设置 → 云端配置 → 解锁 → 「更新地址」**填
 `https://dash.vpanel.cc/updates/update-manifest.json` → 保存并上传云端。
-全员下次启动自动改从 VPS 检查/下载更新；VPS 不可达时回退内置 GitHub 地址。
+全员下次启动自动改从 VPS 检查/下载更新；VPS 不可达时仍会尝试内置回退地址。
 
 ## 校验
 

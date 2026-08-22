@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from app_runtime import (
+    configured_update_manifest_fallback_url,
     evidenced_text,
     first_image,
     first_output_image,
@@ -17,6 +18,17 @@ from app_runtime import (
     version_tuple,
     worker_prefix,
 )
+
+
+def test_update_manifest_fallback_can_be_overridden_by_environment(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "DASHDESIGN_UPDATE_MANIFEST_FALLBACK_URL",
+        "https://github.example/update-manifest.json",
+    )
+    assert (
+        configured_update_manifest_fallback_url()
+        == "https://github.example/update-manifest.json"
+    )
 
 
 class TestVersionTuple:

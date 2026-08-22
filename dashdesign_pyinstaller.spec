@@ -22,7 +22,13 @@ def collect_datas():
         path = ROOT / directory
         if path.exists():
             datas.append((str(path), directory))
-    for file_name in ("requirements.txt", "requirements-desktop.txt", "VERSION", "UPDATE_MANIFEST_URL"):
+    for file_name in (
+        "requirements.txt",
+        "requirements-desktop.txt",
+        "VERSION",
+        "UPDATE_MANIFEST_URL",
+        "UPDATE_MANIFEST_FALLBACK_URL",
+    ):
         path = ROOT / file_name
         if path.exists():
             datas.append((str(path), "."))

@@ -49,6 +49,7 @@ from app_runtime import (
     IMAGE_EXTENSIONS,
     PROJECT_ROOT,
     app_icon_path,
+    configured_update_manifest_fallback_url,
     configured_update_manifest_url,
     first_output_image,
     platform_key,
@@ -124,8 +125,12 @@ class DashDesignQtApp(QMainWindow):
             theme.manager().changed.connect(self._on_theme_changed)
         self._restore_settings()
         self.statusBar().showMessage("就绪")
-        # 更新地址可来自 baked 文件或 app-config 下发的 update_manifest_url，任一存在即启动静默检查。
-        if configured_update_manifest_url() or cloud_bootstrap.cached_app_config().get("update_manifest_url"):
+        # 更新地址可来自发布包或 app-config，任一存在即启动静默检查。
+        if (
+            configured_update_manifest_url()
+            or configured_update_manifest_fallback_url()
+            or cloud_bootstrap.cached_app_config().get("update_manifest_url")
+        ):
             QTimer.singleShot(1600, lambda: self.check_for_updates(silent=True))
 
     def _build_actions(self) -> None:
@@ -820,12 +825,16 @@ class DashDesignQtApp(QMainWindow):
         open_path(self, self._last_engineering_dir)
 
     def check_for_updates(self, silent: bool = False) -> None:
-        # 主源优先 VPS（app-config 下发的 update_manifest_url，国内可达），
-        # 回退 baked 的 GitHub URL；两者任一可达即可检查/下载更新。
+        # 云端配置优先；发布包默认是 VPS 镜像，另带 GitHub 兼容回退。
         baked = configured_update_manifest_url()
-        primary = str(cloud_bootstrap.cached_app_config().get("update_manifest_url", "") or "").strip()
+        baked_fallback = configured_update_manifest_fallback_url()
+        primary = str(
+            cloud_bootstrap.cached_app_config().get("update_manifest_url", "") or ""
+        ).strip()
         manifest_url = primary or baked
-        fallback_url = baked if primary else ""
+        fallback_url = baked if primary and baked != primary else ""
+        if not manifest_url:
+            manifest_url = baked_fallback
         if not manifest_url:
             if not silent:
                 QMessageBox.information(
@@ -836,7 +845,13 @@ class DashDesignQtApp(QMainWindow):
                 )
             return
         self.statusBar().showMessage("正在检查更新...")
-        fetch_update_manifest(manifest_url, self.update_signals, silent, fallback_url=fallback_url)
+        fetch_update_manifest(
+            manifest_url,
+            self.update_signals,
+            silent,
+            fallback_url=fallback_url,
+            fallback_urls=(baked_fallback,),
+        )
 
     def handle_update_result(self, payload: dict, silent: bool) -> None:
         self.statusBar().showMessage("更新检查完成")

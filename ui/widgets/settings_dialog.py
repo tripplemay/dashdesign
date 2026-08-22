@@ -232,7 +232,7 @@ class SettingsDialog(QDialog):
         self.cfg_model = QLineEdit(str(cfg.get("baseline_model", "") or "gpt-4o"))
         self.cfg_model.setPlaceholderText("文档合并模型，如 gpt-4o")
         self.cfg_update_url = QLineEdit(str(cfg.get("update_manifest_url", "") or ""))
-        self.cfg_update_url.setPlaceholderText("留空 = 用内置 GitHub 地址；如 https://dash.vpanel.cc/updates/update-manifest.json")
+        self.cfg_update_url.setPlaceholderText("留空 = 用安装包内置地址；如 https://dash.vpanel.cc/updates/update-manifest.json")
         self.cfg_update_url.setToolTip("客户端从这里检查/下载更新。指向 VPS 可让无法访问 GitHub 的用户也能更新。")
         self.save_cloud_btn = QPushButton("保存并上传云端")
         self.save_cloud_btn.clicked.connect(self._save_cloud)

@@ -37,11 +37,12 @@ def read_app_version() -> str:
     return os.environ.get("DASHDESIGN_VERSION", "0.1.0").lstrip("v")
 
 
-def configured_update_manifest_url() -> str:
-    env_url = os.environ.get("DASHDESIGN_UPDATE_MANIFEST_URL", "").strip()
-    if env_url:
-        return env_url
-    for candidate in (APP_ROOT / "UPDATE_MANIFEST_URL", PROJECT_ROOT / "UPDATE_MANIFEST_URL"):
+def _configured_text(env_name: str, file_name: str) -> str:
+    """Read a packaged/runtime override, preferring the environment."""
+    env_value = os.environ.get(env_name, "").strip()
+    if env_value:
+        return env_value
+    for candidate in (APP_ROOT / file_name, PROJECT_ROOT / file_name):
         try:
             value = candidate.read_text(encoding="utf-8").strip()
         except OSError:
@@ -49,6 +50,24 @@ def configured_update_manifest_url() -> str:
         if value:
             return value
     return ""
+
+
+def configured_update_manifest_url() -> str:
+    """Return the primary update-manifest URL, if one is packaged/configured."""
+    return _configured_text("DASHDESIGN_UPDATE_MANIFEST_URL", "UPDATE_MANIFEST_URL")
+
+
+def configured_update_manifest_fallback_url() -> str:
+    """Return the optional secondary update-manifest URL.
+
+    Release builds package this separately from the primary mirror URL so a
+    temporary VPS outage can fall back to GitHub without making GitHub the
+    default path for users whose network blocks its release CDN.
+    """
+    return _configured_text(
+        "DASHDESIGN_UPDATE_MANIFEST_FALLBACK_URL",
+        "UPDATE_MANIFEST_FALLBACK_URL",
+    )
 
 
 APP_VERSION = read_app_version()

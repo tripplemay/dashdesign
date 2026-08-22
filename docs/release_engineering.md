@@ -67,6 +67,7 @@ standalone output and includes:
 - `requirements-desktop.txt`
 - `VERSION`
 - `UPDATE_MANIFEST_URL`
+- `UPDATE_MANIFEST_FALLBACK_URL`
 
 `scripts/package_qt_app.sh` and `pysidedeploy.spec` are retained as an
 experimental PySide Deploy/Nuitka path. The GitHub Release workflow uses
@@ -129,17 +130,23 @@ The installer definition is `packaging/windows/DashDesign.iss`.
 The Qt client supports a manifest-based update check. Configure:
 
 ```bash
-export DASHDESIGN_UPDATE_MANIFEST_URL="https://github.com/ORG/REPO/releases/latest/download/update-manifest.json"
+export DASHDESIGN_UPDATE_MANIFEST_URL="https://dash.vpanel.cc/updates/update-manifest.json"
+export DASHDESIGN_UPDATE_MANIFEST_FALLBACK_URL="https://github.com/ORG/REPO/releases/latest/download/update-manifest.json"
 ```
 
-The release workflow writes the same URL into `UPDATE_MANIFEST_URL` before
-packaging, so release builds can check for updates without requiring an
-environment variable. The environment variable remains an override for staging
-or private update channels.
+The release workflow packages `VPS_UPDATES_BASE_URL` (defaulting to
+`https://dash.vpanel.cc/updates`) as `UPDATE_MANIFEST_URL` and the GitHub URL as
+`UPDATE_MANIFEST_FALLBACK_URL`. This avoids making GitHub's
+short-lived `release-assets.githubusercontent.com` redirect the default path;
+some proxies cache that redirect and return HTTP 403 after its signature expires.
+The two environment variables remain overrides for staging or private update
+channels. Both files are bundled by the PyInstaller and PySide deployment specs.
 
-The app checks the manifest URL on startup when configured, compares the
-manifest version with `APP_VERSION`, and opens the platform installer download
-URL when a newer version exists.
+The app checks the configured sources on startup, compares the manifest version
+with `APP_VERSION`, and opens the platform installer download URL when a newer
+version exists. Existing builds that only contain the GitHub URL remain
+compatible with the loader; install one new build manually if the old build
+cannot reach GitHub.
 
 Generated manifest example:
 

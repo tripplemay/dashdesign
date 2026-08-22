@@ -28,6 +28,7 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_NOTARY_KEYCHAIN_PROFILE: ${{ secrets.APPLE_NOTARY_KEYCHAIN_PROFILE }}
       HAS_MAC_CERT: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
+      UPDATE_MIRROR_BASE_URL: ${{ secrets.VPS_UPDATES_BASE_URL || 'https://dash.vpanel.cc/updates' }}
 
     steps:
       - name: Checkout
@@ -47,7 +48,12 @@ jobs:
       - name: Set app version
         run: |
           echo "${VERSION#v}" > VERSION
-          echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update-manifest.json" > UPDATE_MANIFEST_URL
+          # Prefer the stable VPS mirror. GitHub's latest/download endpoint
+          # redirects to a short-lived release-assets URL that some networks
+          # cache or reject with HTTP 403.
+          MIRROR_BASE="${UPDATE_MIRROR_BASE_URL%/}"
+          echo "${MIRROR_BASE}/update-manifest.json" > UPDATE_MANIFEST_URL
+          echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update-manifest.json" > UPDATE_MANIFEST_FALLBACK_URL
 
       - name: Inject baked client token
         shell: bash
@@ -130,6 +136,7 @@ jobs:
     env:
       VERSION: ${{ github.event.inputs.version || github.ref_name }}
       HAS_WIN_CERT: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' || secrets.WINDOWS_SIGN_CERT_PATH != '' }}
+      UPDATE_MIRROR_BASE_URL: ${{ secrets.VPS_UPDATES_BASE_URL || 'https://dash.vpanel.cc/updates' }}
 
     steps:
       - name: Checkout
@@ -151,7 +158,10 @@ jobs:
         shell: bash
         run: |
           echo "${VERSION#v}" > VERSION
-          echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update-manifest.json" > UPDATE_MANIFEST_URL
+          # Keep the same source order as the macOS build above.
+          MIRROR_BASE="${UPDATE_MIRROR_BASE_URL%/}"
+          echo "${MIRROR_BASE}/update-manifest.json" > UPDATE_MANIFEST_URL
+          echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update-manifest.json" > UPDATE_MANIFEST_FALLBACK_URL
 
       - name: Inject baked client token
         shell: bash
@@ -346,3 +356,35 @@ jobs:
           $SSH "$VPS_USER@$VPS_HOST" \
             "find '$DIR' -maxdepth 1 -type f -name 'DashDesign-*' ! -name '*${VERSION_CLEAN}*' -delete"
           rm -f "$KEY"
+
+      - name: Verify public VPS update mirror
+        if: env.HAS_VPS == 'true'
+        env:
+          VPS_UPDATES_BASE_URL: ${{ secrets.VPS_UPDATES_BASE_URL }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${VPS_UPDATES_BASE_URL:-https://dash.vpanel.cc/updates}"
+          BASE_URL="${BASE_URL%/}"
+          URL="${BASE_URL}/update-manifest.json?_dashdesign_verify=${GITHUB_RUN_ID}"
+          curl --fail --silent --show-error --location \
+            --retry 5 --retry-delay 3 --retry-all-errors --max-time 30 \
+            "$URL" -o /tmp/update-manifest.json
+          python - "$VERSION" "$BASE_URL" /tmp/update-manifest.json <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          expected = sys.argv[1].lstrip("v")
+          base_url = sys.argv[2].rstrip("/")
+          manifest = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+          if manifest.get("version") != expected:
+              raise SystemExit(
+                  f"VPS manifest version {manifest.get('version')!r} != {expected!r}"
+              )
+          platforms = manifest.get("platforms") or {}
+          for platform in ("macos", "windows"):
+              url = str((platforms.get(platform) or {}).get("url") or "")
+              if not url.startswith(base_url + "/"):
+                  raise SystemExit(f"{platform} URL is not on VPS mirror: {url}")
+          print(f"Verified {URL}: version {expected}")
+          PY
