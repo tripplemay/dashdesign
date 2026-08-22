@@ -97,6 +97,11 @@ class SqlBaselineStore:
             baseline_id=baseline_id, name=name, active_version=version, org_id=org_id
         )
         self.s.add(project)
+        # Version and Membership reference Project, but the models deliberately
+        # expose no ORM relationships for those rows.  Flush the parent first so
+        # databases that enforce foreign keys (notably production PostgreSQL)
+        # cannot schedule either child insert ahead of it.
+        self.s.flush()
         self.s.add(
             db.Version(
                 baseline_id=baseline_id,
