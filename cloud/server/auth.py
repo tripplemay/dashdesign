@@ -92,6 +92,11 @@ def ensure_user_with_token(
         user.name = name
         user.is_admin = is_admin
         user.global_role = global_role
+    # ``Token.user_id`` is a foreign key.  There is no ORM relationship from
+    # Token back to User, so PostgreSQL cannot infer the insert dependency from
+    # the unit-of-work graph.  Flush the principal first before adding its token
+    # (SQLite's default foreign-key setting previously hid this in tests).
+    session.flush()
     token_hash = hash_token(token)
     if session.get(db.Token, token_hash) is None:
         session.add(db.Token(token_hash=token_hash, user_id=user_id))
