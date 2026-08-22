@@ -110,8 +110,10 @@ In DashDesign: **文件 → 设置 → 云端基线**
 - 访问令牌: the token from step 6.
 
 Save → the app immediately switches to the cloud repository. Existing **local**
-projects are not auto-uploaded; re-create/import them once so they live in the
-cloud and every seat sees them.
+projects are recovered automatically when the client uses a global-admin token:
+all locally available versions are imported in one transaction, while the local
+files remain untouched. A same-ID cloud project is never overwritten; the
+baseline page reports that conflict for manual review.
 
 ---
 

@@ -159,6 +159,21 @@ def create_app(
         store.create_project(baseline, owner_user_id=principal.user_id)
         return _project_info(store, str(baseline["baseline_id"]))
 
+    @app.post("/projects/import", response_model=schemas.ProjectInfoOut, status_code=201)
+    def import_project(
+        body: schemas.ProjectImportIn,
+        store: SqlBaselineStore = Depends(get_store),
+        principal: auth.Principal = Depends(get_principal),
+    ):
+        if not principal.is_admin:
+            raise _HTTPError(403, "forbidden", ["只有全局管理员可以导入旧项目"])
+        project = store.import_project(
+            body.versions,
+            body.active_version,
+            owner_user_id=principal.user_id,
+        )
+        return _project_info(store, project.baseline_id)
+
     @app.get("/projects/{baseline_id}", response_model=schemas.ProjectInfoOut)
     def get_project(
         baseline_id: str,

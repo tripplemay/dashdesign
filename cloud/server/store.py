@@ -118,6 +118,62 @@ class SqlBaselineStore:
         self.s.flush()
         return project
 
+    def import_project(
+        self,
+        versions: List[dict],
+        active_version: str,
+        owner_user_id: str,
+        org_id: str = "default",
+    ) -> db.Project:
+        """Atomically import all snapshots from a legacy filesystem project."""
+        if not versions:
+            raise BaselineError("导入项目至少需要一个版本")
+
+        baseline_ids = {str(item.get("baseline_id", "")) for item in versions}
+        if len(baseline_ids) != 1:
+            raise BaselineError("导入版本的 baseline_id 必须一致")
+        baseline_id = next(iter(baseline_ids))
+        if not is_valid_baseline_id(baseline_id):
+            raise BaselineError(f"非法 baseline_id：{baseline_id!r}")
+        if self.get_project(baseline_id) is not None:
+            raise ConflictError(f"项目已存在：{baseline_id}")
+
+        by_version = {str(item.get("version", "")): item for item in versions}
+        if len(by_version) != len(versions):
+            raise BaselineError("导入项目包含重复版本")
+        if active_version not in by_version:
+            raise BaselineError(f"活跃版本不在导入数据中：{active_version}")
+        for item in versions:
+            self._require_valid(item)
+        self._require_clean(by_version[active_version])
+
+        active = by_version[active_version]
+        name = str(active.get("project", {}).get("name") or baseline_id)
+        project = db.Project(
+            baseline_id=baseline_id,
+            name=name,
+            active_version=active_version,
+            org_id=org_id,
+        )
+        self.s.add(project)
+        self.s.flush()
+        for version, item in by_version.items():
+            self.s.add(
+                db.Version(
+                    baseline_id=baseline_id,
+                    version=version,
+                    status=str(item.get("status", "draft")),
+                    parent_version=item.get("parent_version"),
+                    etag=canonical_etag(item),
+                    data=item,
+                )
+            )
+        self.s.add(
+            db.Membership(baseline_id=baseline_id, user_id=owner_user_id, role="admin")
+        )
+        self.s.flush()
+        return project
+
     def load_version(self, baseline_id: str, version: str) -> Tuple[dict, str]:
         row = self._get_version_row(baseline_id, version)
         if row is None:

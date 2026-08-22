@@ -4,9 +4,11 @@ aggregate that replaced the page's repeated /projects + per-version downloads.""
 from __future__ import annotations
 
 import collections
+from pathlib import Path
 
 import pytest
 
+from baseline.migration import MigrationSummary
 from baseline.store import ProjectInfo, VersionSummary
 from ui import baseline_service as bs
 
@@ -117,3 +119,27 @@ class TestLoadOverview:
         assert ov.projects == []
         assert ov.versions == []
         assert ov.selected_payload is None
+
+    def test_cloud_migration_reloads_project_list_once(self, monkeypatch) -> None:
+        fake = _FakeRepo([], {}, {})
+        fake.import_project = lambda versions, active: None
+
+        def _migrate(local_roots, cache_roots, repo, remote):
+            assert list(local_roots) == [Path("local")]
+            assert list(cache_roots) == [Path("cache")]
+            assert remote == []
+            fake._projects = [ProjectInfo("restored", "已恢复", None, [])]
+            return MigrationSummary(migrated=["restored"])
+
+        monkeypatch.setattr(
+            bs,
+            "_legacy_roots",
+            lambda name: [Path("local" if name == "baselines" else "cache")],
+        )
+        monkeypatch.setattr(bs, "migrate_legacy_projects", _migrate)
+
+        projects, notice = bs._list_projects(fake)
+
+        assert [item.baseline_id for item in projects] == ["restored"]
+        assert notice == "已从本机恢复 1 个项目到云端"
+        assert fake.calls["list_projects"] == 2

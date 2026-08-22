@@ -119,6 +119,21 @@ class TestClientLifecycle:
         # Returns without error (server stored it); original stays local.
         assert repo.add_document("docproj", src) == src
 
+    def test_import_project_preserves_existing_version_states(self, repo):
+        published = base_baseline("legacy_client", "2026.07.06.1")
+        published["status"] = "published"
+        draft = base_baseline("legacy_client", "2026.07.06.2")
+        draft["parent_version"] = published["version"]
+
+        info = repo.import_project([published, draft], published["version"])
+
+        assert info.active_version == published["version"]
+        assert info.versions == [published["version"], draft["version"]]
+        assert [item.status for item in repo.list_version_summaries("legacy_client")] == [
+            "published",
+            "draft",
+        ]
+
 
     def test_merge_job_background_completes_on_real_server(self, live_base):
         # Verifies the background task runs to completion under real uvicorn

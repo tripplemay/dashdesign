@@ -10,6 +10,7 @@ GUI entry point; Phase B swaps the underlying repository for an HTTP one.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -17,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from PySide6.QtCore import QSettings, QStandardPaths
 
 from app_runtime import baseline_path as bundled_baseline_path
+from baseline.migration import migrate_legacy_projects
 from baseline.seed import seed_if_empty
 from baseline.store import BaselineRepository, ProjectInfo, VersionSummary
 from ui import cloud_bootstrap
@@ -25,6 +27,10 @@ _ACTIVE_KEY = "baseline/active_project"
 # Either a local BaselineRepository or a cloud HttpBaselineRepository (same
 # duck-typed surface); chosen by whether a cloud endpoint + token are configured.
 _repo: Optional[Any] = None
+_migration_lock = threading.Lock()
+_migration_repo: Optional[Any] = None
+_migration_checked = False
+_migration_notice = ""
 
 
 def _store_root() -> Path:
@@ -35,6 +41,29 @@ def _store_root() -> Path:
 def _cloud_cache_root() -> Path:
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     return Path(base) / "baseline_cloud_cache"
+
+
+def _legacy_roots(dirname: str) -> List[Path]:
+    """Current and historical Qt AppData roots, ordered newest first."""
+    app_data = Path(
+        QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    )
+    generic_data = Path(
+        QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericDataLocation)
+    )
+    candidates = [
+        app_data / dirname,
+        app_data.parent / dirname,
+        generic_data / "DashDesign" / dirname,
+        # Older launches could resolve AppDataLocation before the application
+        # name was installed, which Qt stores under its host process name.
+        generic_data / "Python" / dirname,
+    ]
+    roots: List[Path] = []
+    for path in candidates:
+        if path not in roots:
+            roots.append(path)
+    return roots
 
 
 def repository() -> Any:
@@ -57,12 +86,49 @@ def repository() -> Any:
 
 def reset_repository() -> None:
     """Drop the cached repository so a changed cloud config takes effect."""
-    global _repo
-    _repo = None
+    global _repo, _migration_repo, _migration_checked, _migration_notice
+    with _migration_lock:
+        _repo = None
+        _migration_repo = None
+        _migration_checked = False
+        _migration_notice = ""
+
+
+def _list_projects(repo: Any) -> tuple[List[ProjectInfo], str]:
+    """List cloud projects and perform the one-time legacy import if supported."""
+    if not callable(getattr(repo, "import_project", None)):
+        return repo.list_projects(), ""
+
+    global _migration_repo, _migration_checked, _migration_notice
+    with _migration_lock:
+        if _migration_repo is not repo:
+            _migration_repo = repo
+            _migration_checked = False
+            _migration_notice = ""
+
+        remote = repo.list_projects()
+        if _migration_checked:
+            return remote, _migration_notice
+
+        try:
+            summary = migrate_legacy_projects(
+                _legacy_roots("baselines"),
+                _legacy_roots("baseline_cloud_cache"),
+                repo,
+                remote,
+            )
+            _migration_notice = summary.message()
+            if summary.changed:
+                remote = repo.list_projects()
+        except Exception as exc:  # noqa: BLE001 - migration must not hide cloud data
+            _migration_notice = f"本机项目自动恢复失败：{exc}"
+        _migration_checked = True
+        return remote, _migration_notice
 
 
 def projects() -> List[ProjectInfo]:
-    return repository().list_projects()
+    projects, _notice = _list_projects(repository())
+    return projects
 
 
 def active_project_id() -> Optional[str]:
@@ -107,6 +173,7 @@ class BaselineOverview:
     selected_version: Optional[str]
     selected_payload: Optional[Dict[str, Any]]
     global_active_project: Optional[str] = None
+    migration_notice: str = ""
 
 
 def _resolve_active_pid(ids: List[str], selected: Optional[str], stored: str) -> Optional[str]:
@@ -130,7 +197,7 @@ def load_overview(
     is fetched. Safe to call off the UI thread.
     """
     repo = repository()
-    projects = repo.list_projects()
+    projects, migration_notice = _list_projects(repo)
     ids = [p.baseline_id for p in projects]
     pid = _resolve_active_pid(ids, selected_project, _stored_active_project())
     info = next((p for p in projects if p.baseline_id == pid), None)
@@ -155,6 +222,7 @@ def load_overview(
         selected_version=selected,
         selected_payload=payload,
         global_active_project=_resolve_active_pid(ids, None, _stored_active_project()),
+        migration_notice=migration_notice,
     )
 
 

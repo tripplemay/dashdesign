@@ -49,6 +49,13 @@ class SetActiveIn(BaseModel):
     version: str
 
 
+class ProjectImportIn(BaseModel):
+    """Atomic import of a legacy filesystem project's complete version set."""
+
+    versions: List[Dict[str, Any]]
+    active_version: str
+
+
 class MergeJobIn(BaseModel):
     document_id: Optional[str] = None
     # Optional inline extracted text: lets the client keep originals local and

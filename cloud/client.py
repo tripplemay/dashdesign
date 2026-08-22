@@ -120,6 +120,15 @@ class HttpBaselineRepository:
         _raise_for_error(resp)
         return self._to_info(resp.json())
 
+    def import_project(self, versions: List[dict], active_version: str) -> ProjectInfo:
+        """Atomically copy a legacy local project without rewriting its history."""
+        resp = self._post(
+            "/projects/import",
+            json={"versions": versions, "active_version": active_version},
+        )
+        _raise_for_error(resp)
+        return self._to_info(resp.json())
+
     # -- versions ------------------------------------------------------
     def list_versions(self, baseline_id: str) -> List[str]:
         resp = self._get(f"/projects/{baseline_id}/versions")

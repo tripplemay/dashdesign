@@ -271,7 +271,7 @@ class BaselinePage(QWidget):
         if not overview.active_project_id or not overview.selected_version or payload is None:
             self._set_meta("（无项目）", "-", "-", "-")
             self._toggle_actions(None, overview.active_version)
-            self.status_hint.setText("")
+            self.status_hint.setText(overview.migration_notice)
             return
         project = payload.get("project", {}) if isinstance(payload, dict) else {}
         status = str(payload.get("status", "-"))
@@ -282,7 +282,10 @@ class BaselinePage(QWidget):
             _STATUS_LABELS.get(status, status),
             _AUDIENCE_LABELS.get(mode, mode),
         )
-        self.status_hint.setText(f"活跃版本：{overview.active_version or '无'}")
+        hint = f"活跃版本：{overview.active_version or '无'}"
+        if overview.migration_notice:
+            hint += f" · {overview.migration_notice}"
+        self.status_hint.setText(hint)
         self._toggle_actions(payload, overview.active_version)
         self._build_sections(payload)
 

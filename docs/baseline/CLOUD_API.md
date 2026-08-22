@@ -32,6 +32,7 @@ domain model (evidenced_text / evidence_index / governance), domestic network
 ```
 GET    /projects                          -> [ProjectInfo]
 POST   /projects                          {baseline}            -> ProjectInfo
+POST   /projects/import                   {versions, active_version} -> ProjectInfo # admin-only legacy recovery
 GET    /projects/{id}                     -> ProjectInfo
 GET    /projects/{id}/versions            -> [version, status]
 GET    /projects/{id}/versions/{version}  -> baseline
@@ -58,3 +59,8 @@ GET    /merge-jobs/{job_id}               -> {status, report}
   only extracted text is sent).
 - **Offline:** the client keeps the local repository as a read cache and falls
   back to the bundled baseline when the cloud is unreachable.
+- **Upgrade recovery:** on the first cloud project listing in each client
+  session, missing filesystem projects are imported atomically with all version
+  states intact. A legacy cloud cache is used as a last-resort source when the
+  server is empty. Existing cloud project IDs are never overwritten, and local
+  source files are retained.

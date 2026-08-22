@@ -35,7 +35,7 @@ def test_bootstrap_token_inserts_user_before_token_with_foreign_keys():
         assert auth.principal_for_token(session, "token").user_id == "admin"
 
 
-def test_create_project_inserts_parent_before_children_with_foreign_keys(tmp_path):
+def test_project_writes_insert_parent_before_children_with_foreign_keys(tmp_path):
     engine = create_engine(
         "sqlite://",
         future=True,
@@ -60,11 +60,22 @@ def test_create_project_inserts_parent_before_children_with_foreign_keys(tmp_pat
     )
     app = create_app(settings=settings, engine=engine)
     with TestClient(app) as client:
-        response = client.post(
+        created = client.post(
             "/projects",
             json=base_baseline("foreign_key_project"),
             headers={"Authorization": "Bearer admin-token"},
         )
+        published = base_baseline("imported_project", "2026.07.06.1")
+        published["status"] = "published"
+        draft = base_baseline("imported_project", "2026.07.06.2")
+        draft["parent_version"] = published["version"]
+        imported = client.post(
+            "/projects/import",
+            json={"versions": [published, draft], "active_version": published["version"]},
+            headers={"Authorization": "Bearer admin-token"},
+        )
 
-    assert response.status_code == 201
-    assert response.json()["baseline_id"] == "foreign_key_project"
+    assert created.status_code == 201
+    assert created.json()["baseline_id"] == "foreign_key_project"
+    assert imported.status_code == 201
+    assert imported.json()["versions"] == ["2026.07.06.1", "2026.07.06.2"]

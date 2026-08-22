@@ -115,6 +115,61 @@ class TestProjectLifecycle:
         assert client.get("/projects/ghost", headers=_h(_ADMIN)).status_code == 404
 
 
+class TestProjectImport:
+    @staticmethod
+    def _history(baseline_id="legacy_proj"):
+        published = base_baseline(baseline_id, "2026.07.06.1")
+        published["status"] = "published"
+        draft = base_baseline(baseline_id, "2026.07.06.2")
+        draft["parent_version"] = published["version"]
+        return [published, draft]
+
+    def test_admin_import_preserves_history_and_active_version(self, client):
+        history = self._history()
+        response = client.post(
+            "/projects/import",
+            json={"versions": history, "active_version": "2026.07.06.1"},
+            headers=_h(_ADMIN),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["active_version"] == "2026.07.06.1"
+        assert response.json()["versions"] == ["2026.07.06.1", "2026.07.06.2"]
+        summaries = client.get(
+            "/projects/legacy_proj/versions", headers=_h(_ADMIN)
+        ).json()
+        assert summaries == [
+            {"version": "2026.07.06.1", "status": "published"},
+            {"version": "2026.07.06.2", "status": "draft"},
+        ]
+
+    def test_import_requires_global_admin(self, client, app_ctx):
+        _mint(app_ctx, "editor", "editor-token", global_role="editor")
+        response = client.post(
+            "/projects/import",
+            json={"versions": self._history(), "active_version": "2026.07.06.1"},
+            headers=_h("editor-token"),
+        )
+        assert response.status_code == 403
+
+    def test_import_is_atomic_on_invalid_history(self, client):
+        history = self._history()
+        history[1]["baseline_id"] = "different_project"
+        response = client.post(
+            "/projects/import",
+            json={"versions": history, "active_version": "2026.07.06.1"},
+            headers=_h(_ADMIN),
+        )
+        assert response.status_code == 400
+        assert client.get("/projects", headers=_h(_ADMIN)).json() == []
+
+    def test_import_existing_project_conflicts(self, client):
+        history = self._history()
+        body = {"versions": history, "active_version": "2026.07.06.1"}
+        assert client.post("/projects/import", json=body, headers=_h(_ADMIN)).status_code == 201
+        assert client.post("/projects/import", json=body, headers=_h(_ADMIN)).status_code == 409
+
+
 class TestVersionsAndConcurrency:
     def test_load_version_has_etag(self, client):
         _create_project(client)
