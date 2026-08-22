@@ -31,9 +31,8 @@ DigitalOcean / Vultr it's their smallest-but-one droplet/CX plan.
 
 **Open these ports** in the VPS firewall / security group (and in `ufw` if used):
    - `22` (SSH) — restrict to your IP if possible.
-   - For the quick HTTP test: `8000` — **restrict Source to your IP**.
    - For production TLS: `80` and `443` (open to `0.0.0.0/0` so Let's Encrypt
-     can validate). You can then close `8000`.
+     can validate). The API port stays bound to `127.0.0.1` and is never public.
 
 > **Network note.** Clients reach the server over HTTP(S), so the box just needs
 > to be reachable from wherever your desktop users are. If your team is in China
@@ -79,13 +78,14 @@ nano .env                 # paste them in; leave BASELINE_DOC_STORE=local for no
 ## 5. Start it
 
 ```bash
-# Quick HTTP test (uses the :8000 port; security group must allow your IP):
+# Quick HTTP test from the VPS itself (the API is loopback-only):
 docker compose up -d --build
 docker compose ps
 curl -s http://localhost:8000/healthz          # -> {"status":"ok"}
 ```
 
-From your laptop: `curl http://<ECS_PUBLIC_IP>:8000/healthz` should also return ok.
+If port `8000` is already in use, set `BASELINE_HOST_PORT=8030` in `.env` and
+test `curl -s http://localhost:8030/healthz` instead.
 
 ## 6. Create a login token for each teammate
 
@@ -106,7 +106,7 @@ you can use directly from the desktop app.
 ## 7. Point the desktop app at the server
 
 In DashDesign: **文件 → 设置 → 云端基线**
-- 服务地址: `http://<ECS_PUBLIC_IP>:8000` (test) or `https://<your-domain>` (TLS).
+- 服务地址: `https://<your-domain>`.
 - 访问令牌: the token from step 6.
 
 Save → the app immediately switches to the cloud repository. Existing **local**
@@ -119,16 +119,20 @@ cloud and every seat sees them.
 
 Bearer tokens must not travel over plain HTTP. Add a domain + Caddy auto-HTTPS:
 
-1. Point an A-record (e.g. `baseline.example.com`) at the ECS public IP.
-2. Open ports `80` and `443` in the security group; you can drop `8000`.
-3. In `.env`, set `SITE_DOMAIN=baseline.example.com`.
-4. In `docker-compose.yml`, remove the `api` service's `ports:` block (so it is
-   only reachable via Caddy), then:
+1. Point an A-record (e.g. `baseline.example.com`) at the VPS public IP.
+2. Open ports `80` and `443` in the security group. Keep the API bound to loopback.
+3. If this is a dedicated host, set `SITE_DOMAIN=baseline.example.com` in `.env`
+   and let the bundled Caddy container terminate TLS:
    ```bash
    docker compose --profile tls up -d --build
    ```
-   Caddy fetches a Let's Encrypt cert automatically. Use `https://<domain>` in
-   the app.
+4. If the host already runs nginx, leave Caddy disabled and install an nginx
+   vhost that proxies to `127.0.0.1:${BASELINE_HOST_PORT}`. The production
+   `dash.vpanel.cc` example is in `deploy/dash.vpanel.cc.nginx.conf`.
+
+Caddy fetches a Let's Encrypt certificate automatically. With host nginx, issue
+and renew the certificate using the host's existing Certbot setup. In either
+case, use `https://<domain>` in the app.
 
 ## 9. Upgrades (optional)
 

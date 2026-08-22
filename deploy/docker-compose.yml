@@ -1,7 +1,9 @@
-# Always-on baseline cloud on a single Aliyun ECS box.
+# Always-on baseline cloud on a single VPS.
 #   cd deploy && cp .env.example .env && edit .env
 #   docker compose up -d --build                 # HTTP on :8000 (test only)
 #   docker compose --profile tls up -d --build   # HTTPS via Caddy (production)
+name: dashdesign-cloud
+
 services:
   db:
     image: postgres:16-alpine
@@ -41,10 +43,17 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
-    # Quick HTTP test only (tokens travel in cleartext — lock the security group
-    # to your IP). For production use the `tls` profile below instead.
+    # Keep the API on loopback; the host nginx/Caddy process terminates TLS.
+    # Set BASELINE_HOST_PORT when another service already owns 8000.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:${BASELINE_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # Auto-HTTPS reverse proxy. Enable with `--profile tls`; needs SITE_DOMAIN's
   # A-record pointing at this ECS public IP and ports 80/443 open.
