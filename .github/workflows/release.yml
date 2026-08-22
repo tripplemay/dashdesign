@@ -386,5 +386,5 @@ jobs:
               url = str((platforms.get(platform) or {}).get("url") or "")
               if not url.startswith(base_url + "/"):
                   raise SystemExit(f"{platform} URL is not on VPS mirror: {url}")
-          print(f"Verified {URL}: version {expected}")
+          print(f"Verified {base_url}/update-manifest.json: version {expected}")
           PY
