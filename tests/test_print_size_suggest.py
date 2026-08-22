@@ -77,3 +77,10 @@ class TestSuggestPrintSize:
         source = workdir / "photo.jpg"
         _write_png(source, (1000, 1000))
         assert suggest_print_size_cm(source) == (120.0, 120.0)  # falls through to pixels
+
+    def test_alphanumeric_temp_directory_is_not_mistaken_for_size(self, tmp_path: Path) -> None:
+        workdir = tmp_path / "djsxfhc17x95674wsm_g8s980000gn"
+        workdir.mkdir()
+        source = workdir / "photo.jpg"
+        _write_png(source, (1500, 1000))
+        assert suggest_print_size_cm(source) == (120.0, 80.0)

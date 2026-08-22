@@ -24,6 +24,9 @@ import re
 from pathlib import Path
 
 _SIZE_RE = re.compile(r"(\d+)\s*(?:乘以|乘|[xX*×])\s*(\d+)")
+_DIR_SIZE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(\d+)\s*(?:乘以|乘|[xX*×])\s*(\d+)(?![A-Za-z0-9])"
+)
 # 无任何尺寸线索时，按源图比例取长边为该 cm 值，保证比例正确、成品不被拉伸。
 _DEFAULT_LONG_EDGE_CM = 120.0
 
@@ -54,7 +57,7 @@ def _from_print_spec(source: Path) -> "tuple[float, float] | None":
 
 def _from_ancestors(source: Path) -> "tuple[float, float] | None":
     for part in reversed(source.parent.parts):
-        match = _SIZE_RE.search(part)
+        match = _DIR_SIZE_RE.search(part)
         if match:
             return _positive_pair(float(match.group(1)), float(match.group(2)))
     return None

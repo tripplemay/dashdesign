@@ -86,6 +86,13 @@ class TestResolvePhysicalSize:
         source.touch()
         assert rebuild.resolve_physical_size(source) is None
 
+    def test_alphanumeric_temp_directory_is_not_a_size(self, tmp_path: Path) -> None:
+        workdir = tmp_path / "djsxfhc17x95674wsm_g8s980000gn"
+        workdir.mkdir()
+        source = workdir / "master.png"
+        source.touch()
+        assert rebuild.resolve_physical_size(source) is None
+
 
 class TestBuildProfileError:
     def test_raises_clear_error_when_size_unresolvable(self, tmp_path: Path) -> None:

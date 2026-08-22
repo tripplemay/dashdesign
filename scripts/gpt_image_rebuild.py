@@ -120,7 +120,9 @@ def save_preview(source: Path, destination: Path, max_edge: int = 1600) -> None:
 # 文生图 / 整幅海报工作流的产物（master.png）文件名不带物理尺寸，
 # 尺寸写在同目录 print_spec.json 与父目录名（如 ..._80x80_...）里。
 # 串接这些产物做 GPT 重建时，需要在文件名解析失败后回退到这两处。
-_DIR_SIZE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*[乘xX×*]\s*(\d+(?:\.\d+)?)")
+_DIR_SIZE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(\d+(?:\.\d+)?)\s*[乘xX×*]\s*(\d+(?:\.\d+)?)(?![A-Za-z0-9])"
+)
 
 
 def _normalize_cm(value: float) -> int | float:
