@@ -148,7 +148,7 @@ def run_full(tmp_path, monkeypatch, *, execute=True, postprocess=False, candidat
     monkeypatch.setattr(sys, "argv", args)
     code = full.main()
     package = next(tmp_path.glob("*full_poster_image2"))
-    return code, json.loads((package / "status.json").read_text()), package
+    return code, json.loads((package / "status.json").read_text(encoding="utf-8")), package
 
 
 def test_full_poster_404_exits_nonzero(tmp_path, monkeypatch):
@@ -156,7 +156,7 @@ def test_full_poster_404_exits_nonzero(tmp_path, monkeypatch):
     monkeypatch.setattr(requests, "post", post)
     code, state, package = run_full(tmp_path, monkeypatch)
     assert code == 1 and state["result"]["outcome"] == "failed"
-    assert json.loads((package / "generation_record.json").read_text())["model"] == "custom-image"
+    assert json.loads((package / "generation_record.json").read_text(encoding="utf-8"))["model"] == "custom-image"
     assert not list(package.rglob("*.png"))
 
 
@@ -166,7 +166,7 @@ def test_full_poster_retains_partial_artifact_and_checkpoints(tmp_path, monkeypa
     def generate(payload, output):
         nonlocal count
         count += 1
-        saved = json.loads((output.parent.parent / "status.json").read_text())
+        saved = json.loads((output.parent.parent / "status.json").read_text(encoding="utf-8"))
         assert len(saved["image_generation"]) == count
         if count == 2:
             assert saved["image_generation"][0]["status"] == "generated"
@@ -275,7 +275,7 @@ def test_desktop_worker_subprocess_404_contract(tmp_path):
              "--output-dir", str(tmp_path), "--width-cm", "8", "--height-cm", "18",
              "--prompt", "classroom", "--poster-copy", "主标题：学习AI", "--candidates", "1",
              "--model", "worker-image", "--execute"],
-            env=env, cwd=ROOT, capture_output=True, text=True, timeout=30,
+            env=env, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30,
         )
     finally:
         server.shutdown()
@@ -287,6 +287,6 @@ def test_desktop_worker_subprocess_404_contract(tmp_path):
     final = next(event for event in events if event and event.kind == "result")
     assert final.outcome == "failed"
     assert not any(event and event.kind == "done" for event in events)
-    state = json.loads((Path(final.label) / "status.json").read_text())
+    state = json.loads((Path(final.label) / "status.json").read_text(encoding="utf-8"))
     assert state["result"]["exit_code"] == 1
     assert "fake-worker-key" not in result.stdout + result.stderr
