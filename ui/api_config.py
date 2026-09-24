@@ -17,6 +17,8 @@ from ui import cloud_bootstrap
 _BASE_URL_KEY = "api/base_url"
 _API_KEY_KEY = "api/key"
 _BASELINE_MODEL_KEY = "api/baseline_model"
+_IMAGE_MODEL_KEY = "api/image_model"
+DEFAULT_IMAGE_MODEL = "gpt-image-2"
 
 # 文档合并抽取用的文本模型默认值。不同网关支持的模型不同（有的只支持 OpenAI 系）。
 DEFAULT_BASELINE_MODEL = "gpt-4o"
@@ -46,12 +48,21 @@ def load_baseline_model() -> str:
     )
 
 
-def save(base_url: str, api_key: str, baseline_model: str = "") -> None:
+def load_image_model() -> str:
+    return (
+        str(_cloud().get("image_model", "") or "").strip()
+        or _local(_IMAGE_MODEL_KEY)
+        or DEFAULT_IMAGE_MODEL
+    )
+
+
+def save(base_url: str, api_key: str, baseline_model: str = "", image_model: str = "") -> None:
     """Persist a per-machine override (dev / self-hosted). Cloud config wins over this."""
     settings = QSettings()
     settings.setValue(_BASE_URL_KEY, base_url.strip())
     settings.setValue(_API_KEY_KEY, api_key.strip())
     settings.setValue(_BASELINE_MODEL_KEY, baseline_model.strip() or DEFAULT_BASELINE_MODEL)
+    settings.setValue(_IMAGE_MODEL_KEY, image_model.strip() or DEFAULT_IMAGE_MODEL)
 
 
 def has_api_key() -> bool:

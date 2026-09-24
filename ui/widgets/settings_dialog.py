@@ -9,7 +9,9 @@ password, edits it, and uploads it; every client picks it up on the next fetch.
 from __future__ import annotations
 
 from pathlib import Path
+import threading
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
@@ -28,14 +30,18 @@ from PySide6.QtWidgets import (
 )
 
 from ui import api_config, cloud_bootstrap, theme, workspace
+from ui.model_check import check_image_model
 from ui.widgets.path_field import PathField
 
 _THEME_MODES = (("system", "跟随系统"), ("light", "浅色"), ("dark", "深色"))
 
 
 class SettingsDialog(QDialog):
+    modelCheckReady = Signal(str, str)
+
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
+        self.modelCheckReady.connect(self._show_model_check)
         self.setWindowTitle("设置")
         self.setMinimumWidth(520)
         layout = QVBoxLayout(self)
@@ -169,6 +175,7 @@ class SettingsDialog(QDialog):
         self.local_api_key.setPlaceholderText("API Key")
         self.local_model = QLineEdit(api_config.load_baseline_model())
         self.local_model.setPlaceholderText("文档合并模型，如 gpt-4o")
+        self.local_image_model = QLineEdit(api_config.load_image_model())
         save_btn = QPushButton("保存本机配置")
         save_btn.clicked.connect(self._save_local_api)
         grid.addWidget(QLabel("API 端点"), 1, 0)
@@ -177,11 +184,17 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.local_api_key, 2, 1)
         grid.addWidget(QLabel("文本模型"), 3, 0)
         grid.addWidget(self.local_model, 3, 1)
-        grid.addWidget(save_btn, 4, 1)
+        grid.addWidget(QLabel("图片模型"), 4, 0)
+        grid.addWidget(self.local_image_model, 4, 1)
+        grid.addWidget(save_btn, 5, 1)
+        self.local_check_btn = QPushButton("检查图片模型（不出图）")
+        self.local_check_btn.clicked.connect(lambda: self._check_model("local"))
+        grid.addWidget(self.local_check_btn, 6, 1)
         grid.setColumnStretch(1, 1)
         self.local_api_status = QLabel("")
         self.local_api_status.setObjectName("Subtitle")
-        grid.addWidget(self.local_api_status, 5, 0, 1, 2)
+        self.local_api_status.setWordWrap(True)
+        grid.addWidget(self.local_api_status, 7, 0, 1, 2)
         return group
 
     def _save_local_api(self) -> None:
@@ -190,7 +203,7 @@ class SettingsDialog(QDialog):
         if not base_url or not api_key:
             self.local_api_status.setText("API 端点与 Key 都不能为空。")
             return
-        api_config.save(base_url, api_key, self.local_model.text().strip())
+        api_config.save(base_url, api_key, self.local_model.text().strip(), self.local_image_model.text().strip())
         self.local_api_status.setText("已保存到本机，立即生效。")
 
     # -- cloud config (admin only) -------------------------------------
@@ -231,6 +244,7 @@ class SettingsDialog(QDialog):
         self.cfg_api_key.setPlaceholderText("图像 API Key")
         self.cfg_model = QLineEdit(str(cfg.get("baseline_model", "") or "gpt-4o"))
         self.cfg_model.setPlaceholderText("文档合并模型，如 gpt-4o")
+        self.cfg_image_model = QLineEdit(str(cfg.get("image_model") or api_config.DEFAULT_IMAGE_MODEL))
         self.cfg_update_url = QLineEdit(str(cfg.get("update_manifest_url", "") or ""))
         self.cfg_update_url.setPlaceholderText("留空 = 用安装包内置地址；如 https://dash.vpanel.cc/updates/update-manifest.json")
         self.cfg_update_url.setToolTip("客户端从这里检查/下载更新。指向 VPS 可让无法访问 GitHub 的用户也能更新。")
@@ -244,13 +258,18 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.cfg_api_key, 2, 1)
         grid.addWidget(QLabel("文档合并模型"), 3, 0)
         grid.addWidget(self.cfg_model, 3, 1)
-        grid.addWidget(QLabel("更新地址"), 4, 0)
-        grid.addWidget(self.cfg_update_url, 4, 1)
-        grid.addWidget(self.save_cloud_btn, 5, 1)
+        grid.addWidget(QLabel("图片模型"), 4, 0)
+        grid.addWidget(self.cfg_image_model, 4, 1)
+        grid.addWidget(QLabel("更新地址"), 5, 0)
+        grid.addWidget(self.cfg_update_url, 5, 1)
+        grid.addWidget(self.save_cloud_btn, 6, 1)
+        self.cloud_check_btn = QPushButton("检查图片模型（不出图）")
+        self.cloud_check_btn.clicked.connect(lambda: self._check_model("cloud"))
+        grid.addWidget(self.cloud_check_btn, 7, 1)
 
         divider = QLabel("— 修改管理密码 —")
         divider.setObjectName("Subtitle")
-        grid.addWidget(divider, 6, 0, 1, 2)
+        grid.addWidget(divider, 8, 0, 1, 2)
         self.new_pw_edit = QLineEdit()
         self.new_pw_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.new_pw_edit.setPlaceholderText("新管理密码（至少 6 位）")
@@ -262,11 +281,11 @@ class SettingsDialog(QDialog):
         # 表单内回车应提交当前操作，而不是触发对话框默认按钮直接关窗。
         self.new_pw_edit.returnPressed.connect(self._change_password)
         self.confirm_pw_edit.returnPressed.connect(self._change_password)
-        grid.addWidget(QLabel("新管理密码"), 7, 0)
-        grid.addWidget(self.new_pw_edit, 7, 1)
-        grid.addWidget(QLabel("确认新密码"), 8, 0)
-        grid.addWidget(self.confirm_pw_edit, 8, 1)
-        grid.addWidget(self.change_pw_btn, 9, 1)
+        grid.addWidget(QLabel("新管理密码"), 9, 0)
+        grid.addWidget(self.new_pw_edit, 9, 1)
+        grid.addWidget(QLabel("确认新密码"), 10, 0)
+        grid.addWidget(self.confirm_pw_edit, 10, 1)
+        grid.addWidget(self.change_pw_btn, 11, 1)
         grid.setColumnStretch(1, 1)
         self.cfg_container.setEnabled(False)
         outer.addWidget(self.cfg_container)
@@ -298,6 +317,7 @@ class SettingsDialog(QDialog):
         self.cfg_api_base.setText(str(cfg.get("image_api_base_url", "") or ""))
         self.cfg_api_key.setText(str(cfg.get("image_api_key", "") or ""))
         self.cfg_model.setText(str(cfg.get("baseline_model", "") or "gpt-4o"))
+        self.cfg_image_model.setText(str(cfg.get("image_model") or api_config.DEFAULT_IMAGE_MODEL))
         self.cfg_update_url.setText(str(cfg.get("update_manifest_url", "") or ""))
         self.cloud_status.setText("已解锁，可编辑并上传。")
 
@@ -308,6 +328,7 @@ class SettingsDialog(QDialog):
             "image_api_base_url": self.cfg_api_base.text().strip(),
             "image_api_key": self.cfg_api_key.text().strip(),
             "baseline_model": self.cfg_model.text().strip() or "gpt-4o",
+            "image_model": self.cfg_image_model.text().strip() or api_config.DEFAULT_IMAGE_MODEL,
             "update_manifest_url": self.cfg_update_url.text().strip(),
         }
         try:
@@ -323,6 +344,32 @@ class SettingsDialog(QDialog):
 
         baseline_service.reset_repository()
         self.cloud_status.setText("已保存并上传，所有用户下次启动自动生效。")
+
+    def _check_model(self, channel: str) -> None:
+        if channel == "local":
+            fields = (self.local_api_base, self.local_api_key, self.local_image_model)
+            button, status = self.local_check_btn, self.local_api_status
+        else:
+            fields = (self.cfg_api_base, self.cfg_api_key, self.cfg_image_model)
+            button, status = self.cloud_check_btn, self.cloud_status
+        values = tuple(field.text().strip() for field in fields)
+        button.setEnabled(False)
+        status.setText("正在读取模型列表，不会发起出图请求……")
+
+        def check() -> None:
+            message = check_image_model(*values)
+            try:
+                self.modelCheckReady.emit(channel, message)
+            except RuntimeError:
+                pass  # Dialog may have been destroyed while the request was running.
+
+        threading.Thread(target=check, daemon=True).start()
+
+    def _show_model_check(self, channel: str, message: str) -> None:
+        button, status = ((self.local_check_btn, self.local_api_status) if channel == "local"
+                          else (self.cloud_check_btn, self.cloud_status))
+        button.setEnabled(True)
+        status.setText(message)
 
     def _change_password(self) -> None:
         current = self.admin_pw_edit.text().strip()

@@ -59,3 +59,7 @@ def step(label: str, index: int, total: int, state: str = "start") -> None:
 
 def done(label: str = "") -> None:
     _emit({"kind": "done", "label": str(label)})
+
+
+def result(label: str, value: dict) -> None:
+    _emit({"kind": "result", "label": str(label), **value})

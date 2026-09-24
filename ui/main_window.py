@@ -58,7 +58,7 @@ from app_runtime import (
 )
 from ui import cloud_bootstrap, commands, installer, theme, workspace
 from ui.pages import BaselinePage, BatchPage, GptPage, QrPage, TextImagePage
-from ui.progress import ProgressModel, parse_progress_line
+from ui.progress import ProgressModel, parse_progress_line, resolve_outcome
 from ui.updater import (
     DownloadSignals,
     UpdateSignals,
@@ -94,6 +94,7 @@ class DashDesignQtApp(QMainWindow):
         self._last_engineering_dir: "Path | None" = None  # 本次运行的工程包目录（工作区模式下）
         self._running_worker = ""  # 正在运行的 worker token（供成品整理到工作区）
         self._run_started_at = 0.0  # 本次运行起始墙钟时间，用于只整理本次产出的成品
+        self._cancel_requested = False
         self.current_preview_path: "Path | None" = None
         self._running = False
         self._running_title = ""  # 正在运行的工作流名，进度/状态栏标注归属
@@ -562,6 +563,7 @@ class DashDesignQtApp(QMainWindow):
         self._last_engineering_dir = output_dir
         self._running_worker = command[command.index("--worker") + 1] if "--worker" in command else ""
         self._run_started_at = time.time()
+        self._cancel_requested = False
         self._running_title = self._PAGE_TITLES[self.nav.currentRow()][0]
         self._capture("$ " + " ".join(command))
         self._set_running(True)
@@ -606,9 +608,11 @@ class DashDesignQtApp(QMainWindow):
         if self.process is None:
             return
         self._capture("[停止] 已发送 terminate")
-        self.process.terminate()
-        if not self.process.waitForFinished(2500):
-            self.process.kill()
+        self._cancel_requested = True
+        process = self.process
+        process.terminate()
+        if not process.waitForFinished(2500):
+            process.kill()
 
     def read_stdout(self) -> None:
         if self.process is None:
@@ -646,12 +650,23 @@ class DashDesignQtApp(QMainWindow):
             self._capture(data.rstrip())
 
     def process_finished(self, exit_code: int, exit_status) -> None:  # type: ignore[no-untyped-def]
+        self.read_stdout()
+        self.read_stderr()
         self._flush_stdout_buf()
         elapsed_seconds = self._elapsed_seconds()
         elapsed = self._elapsed_text()
         self._capture(f"[完成] exit={exit_code} · 用时 {elapsed}")
-        success = exit_code == 0
-        self.progress_panel.finalize(self._progress, success, elapsed_seconds)
+        outcome = resolve_outcome(
+            self._progress, exit_code,
+            strict=self._running_worker in {"text-image", "full-poster", "gpt"},
+            cancelled=self._cancel_requested,
+            crashed=exit_status == QProcess.ExitStatus.CrashExit,
+        )
+        success = outcome in {"success", "prepared"}
+        self.progress_panel.finalize(self._progress, success, elapsed_seconds, outcome)
+        if self._progress.done_label:
+            self.last_output_dir = Path(self._progress.done_label)
+            self._last_engineering_dir = self.last_output_dir
         self._set_running(False)
         process = self.process
         self.process = None
@@ -659,10 +674,20 @@ class DashDesignQtApp(QMainWindow):
             # 与 process_error 分支一致：释放已结束的 QProcess，避免多次运行累积。
             process.deleteLater()
         workflow = self._running_title or "工作流"
-        if success:
+        if outcome in {"partial", "cancelled"}:
+            label = "部分成功" if outcome == "partial" else "已取消"
+            detail = self._progress.result_message or "上游请求可能仍在执行；请勿立即重复提交。"
+            if outcome == "partial":
+                detail = f"完成 {self._progress.result_completed}/{self._progress.result_total}；{detail}"
+            self.statusBar().showMessage(f"{label} · 用时 {elapsed}")
+            self.banner.show_message("warning", f"{workflow}{label}。{detail}",
+                                     action_label="打开输出目录", action_callback=self.open_last_output)
+            if outcome == "partial":
+                self.preview_recent_output()
+        elif success:
             self.statusBar().showMessage(f"完成 · 用时 {elapsed}")
-            moved = self._collect_to_workspace()
-            message = f"{workflow}运行完成，用时 {elapsed}。"
+            moved = self._collect_to_workspace() if outcome == "success" else []
+            message = self._progress.result_message or f"{workflow}运行完成，用时 {elapsed}。"
             if moved:
                 message += f"已整理 {len(moved)} 张成品图到工作区。"
             self.banner.show_message(
@@ -682,10 +707,14 @@ class DashDesignQtApp(QMainWindow):
             summary = f"{workflow}运行失败。"
             # 先给用户一句能行动的人话；原始报错缩短保留，完整日志可导出。
             hint = friendly_error_hint(" ".join(self._stderr_tail))
-            if hint:
+            if self._progress.result_message:
+                summary += self._progress.result_message
+            elif hint:
                 summary += hint
             elif tail:
                 summary += f" 错误信息：{tail[:120]}"
+            elif self._running_worker in {"text-image", "full-poster", "gpt"}:
+                summary += "未收到有效的成功结果，请检查输出目录中的 status.json 和运行日志。"
             self.banner.show_message(
                 "error",
                 summary,

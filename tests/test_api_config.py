@@ -43,3 +43,15 @@ def test_empty_env_and_store_means_no_key(monkeypatch: pytest.MonkeyPatch) -> No
     QSettings().clear()
     monkeypatch.setenv("OPENAI_API_KEY", "   ")
     assert api_config.has_api_key() is False
+
+
+def test_image_model_is_independent_and_cloud_wins(monkeypatch):
+    monkeypatch.setattr(api_config, "_cloud", lambda: {})
+    assert api_config.load_image_model() == "gpt-image-2"
+    api_config.save("https://gw/v1", "test-key", "text-custom", " image-custom ")
+    assert api_config.load_image_model() == "image-custom"
+    assert api_config.load_baseline_model() == "text-custom"
+    monkeypatch.setattr(api_config, "_cloud", lambda: {"image_model": "cloud-image"})
+    assert api_config.load_image_model() == "cloud-image"
+    monkeypatch.setattr(api_config, "_cloud", lambda: {"image_model": "  "})
+    assert api_config.load_image_model() == "image-custom"

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import progress
+from workflow_result import checkpoint, create_package_dir, finish, package_exit_code, run_step
 
 from image_api_client import execute_image_generation
 from prompt_translate import translate_visual_prompt
@@ -288,7 +289,7 @@ def build_package(
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     package_dir = output_dir / f"{timestamp}_{cm_label(width_cm)}x{cm_label(height_cm)}_full_poster_image2"
-    package_dir.mkdir(parents=True, exist_ok=True)
+    package_dir = create_package_dir(package_dir)
     (package_dir / "prompt.md").write_text(prompt, encoding="utf-8")
     write_json(package_dir / "baseline_context.json", context_source)
     write_json(package_dir / "prompt_template_profile.json", template_profile)
@@ -340,6 +341,8 @@ def build_package(
         },
     }
 
+    checkpoint(package_dir, status)
+    units = []
     progress.stage(3)
     for index in range(1, candidates + 1):
         progress.step(f"候选 {index}/{candidates}", index, candidates, "start")
@@ -357,8 +360,10 @@ def build_package(
             "request": str(candidate_dir / request_name),
             "master": str(candidate_dir / master_name),
         }
+        status["image_generation"].append(candidate_status)
+        checkpoint(package_dir, status)
         if execute:
-            result = execute_image_generation(payload, candidate_dir / master_name)
+            result = run_step(execute_image_generation, payload, candidate_dir / master_name)
             if isinstance(result, dict) and result.get("status") == "generated":
                 result.update(generated_image_audit(candidate_dir / master_name, image_size, width_cm, height_cm))
             candidate_status.update(result)
@@ -369,7 +374,8 @@ def build_package(
                     "reason": "Run with --execute or use candidate run script after configuring OPENAI_API_KEY.",
                 }
             )
-        status["image_generation"].append(candidate_status)
+        unit = [candidate_status]
+        checkpoint(package_dir, status)
 
         if postprocess_print:
             print_status: dict[str, Any] = {"candidate": index, "status": "pending_image_generation"}
@@ -391,16 +397,22 @@ def build_package(
                 print_output = candidate_dir / "print_ready" / (
                     f"{cm_label(width_cm)}乘以{cm_label(height_cm)}_整图海报候选{index:02d}.jpg"
                 )
-                print_status = {"candidate": index, **prepare_print_output(candidate_dir / master_name, print_output, width_cm, height_cm, dpi, realesrgan_binary, realesrgan_model_dir, realesrgan_model)}
+                print_status = {"candidate": index, **run_step(prepare_print_output, candidate_dir / master_name, print_output, width_cm, height_cm, dpi, realesrgan_binary, realesrgan_model_dir, realesrgan_model)}
             status["print_output"].append(print_status)
+            unit.append(print_status)
+
+        units.append(unit)
+        checkpoint(package_dir, status)
 
         candidate_state = {"error": "fail", "skipped": "skip"}.get(
             str(candidate_status.get("status")), "ok"
         )
         progress.step(f"候选 {index}/{candidates}", index, candidates, candidate_state)
+        if any(item.get("status") == "cancelled" for item in unit):
+            break
 
     progress.stage(4)
-    write_json(package_dir / "status.json", status)
+    checkpoint(package_dir, status)
     readme = textwrap.dedent(
         f"""
         # Full Poster Image2 Package
@@ -418,7 +430,7 @@ def build_package(
         """
     ).strip()
     (package_dir / "README.md").write_text(readme + "\n", encoding="utf-8")
-    progress.done(str(package_dir))
+    finish(package_dir, status, execute, units, total=candidates)
     return package_dir
 
 
@@ -496,7 +508,7 @@ def main() -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
     print(f"Package written to {package_dir}")
-    return 0
+    return package_exit_code(package_dir)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 import progress
+from workflow_result import checkpoint, create_package_dir, finish, package_exit_code, run_step
 
 from image_api_client import execute_image_request
 from prepare_print_assets import parse_size_from_name, target_pixels
@@ -308,9 +309,9 @@ def _build_generate_prompt(
     ).strip()
 
 
-def build_image_generation_payload(profile: ImageProfile, prompt: str) -> dict[str, Any]:
+def build_image_generation_payload(profile: ImageProfile, prompt: str, model: str = "gpt-image-2") -> dict[str, Any]:
     return {
-        "model": "gpt-image-2",
+        "model": model,
         "prompt": prompt,
         "size": profile.gpt_image_size,
         "quality": "high",
@@ -318,9 +319,9 @@ def build_image_generation_payload(profile: ImageProfile, prompt: str) -> dict[s
     }
 
 
-def build_image_edit_payload(profile: ImageProfile, prompt: str) -> dict[str, Any]:
+def build_image_edit_payload(profile: ImageProfile, prompt: str, model: str = "gpt-image-2") -> dict[str, Any]:
     return {
-        "model": "gpt-image-2",
+        "model": model,
         "prompt": prompt,
         "size": profile.gpt_image_size,
         "quality": "high",
@@ -428,6 +429,7 @@ def build_package(
     execute: bool,
     api_mode: str,
     size_override: tuple[int | float, int | float] | None = None,
+    model: str = "gpt-image-2",
 ) -> Path:
     _stages = ["解析源图", "生成预览与请求包"]
     if execute:
@@ -442,7 +444,7 @@ def build_package(
     _advance("解析源图")
     profile = build_profile(source, print_dpi, size_override)
     package_dir = output_dir / f"{slugify_filename(source.name)}_{api_mode}"
-    package_dir.mkdir(parents=True, exist_ok=True)
+    package_dir = create_package_dir(package_dir)
 
     _advance("生成预览与请求包")
     preview_path = package_dir / "source_preview.jpg"
@@ -453,11 +455,11 @@ def build_package(
 
     prompt = build_visual_prompt(profile, description, api_mode)
     if api_mode == "edit":
-        payload = build_image_edit_payload(profile, prompt)
+        payload = build_image_edit_payload(profile, prompt, model)
         request_name = "image_edit_request.json"
         output_name = "gpt_image_edit_master.png"
     else:
-        payload = build_image_generation_payload(profile, prompt)
+        payload = build_image_generation_payload(profile, prompt, model)
         request_name = "image_generation_request.json"
         output_name = "gpt_image_master.png"
 
@@ -491,6 +493,7 @@ def build_package(
     )
 
     status = {
+        "model": model,
         "api_mode": api_mode,
         "image_generation": {"status": "prepared"},
         "text_qr_logo_rebuild": {
@@ -501,22 +504,24 @@ def build_package(
             "Run scripts/prepare_print_assets.py on gpt_image_master.png after naming/copying it with the target physical dimensions."
         ),
     }
+    write_json(package_dir / "generation_record.json", {"model": model, "api_mode": api_mode, "execute_requested": execute})
+    checkpoint(package_dir, status)
     if execute:
         _advance("调用图像 API")
-        status["image_generation"] = execute_image_request(
+        status["image_generation"] = run_step(execute_image_request,
             source,
             payload,
             package_dir / output_name,
             api_mode,
         )
-    elif not os.environ.get("OPENAI_API_KEY"):
+    else:
         status["image_generation"] = {
             "status": "prepared_not_executed",
-            "reason": "OPENAI_API_KEY is not set. Run run_gpt_image_generation.sh after configuring it.",
+            "reason": "Request package prepared without --execute.",
         }
 
     _advance("写状态与完成")
-    write_json(package_dir / "status.json", status)
+    checkpoint(package_dir, status)
 
     if api_mode == "edit":
         workflow_intro = (
@@ -551,14 +556,14 @@ def build_package(
         Files:
         - `profile.json`: source/target metrics and selected GPT Image master size.
         - `prompt.md`: {prompt_desc}
-        - `{request_name}`: Image API request fields for `gpt-image-2`.
+        - `{request_name}`: Image API request fields for `{model}`.
         - `vision_prompt_request.skeleton.json`: prompt-extraction request skeleton for a vision-capable model.
         - `status.json`: current execution status.
         """
     ).strip()
     (package_dir / "README.md").write_text(readme + "\n", encoding="utf-8")
 
-    progress.done(str(package_dir))
+    finish(package_dir, status, execute, [[status["image_generation"]]])
     return package_dir
 
 
@@ -572,6 +577,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for generated workflow packages.",
     )
     parser.add_argument("--print-dpi", type=int, default=200)
+    parser.add_argument("--model", default="gpt-image-2", help="Images API-compatible model id.")
     parser.add_argument(
         "--width-cm",
         type=float,
@@ -620,9 +626,10 @@ def main() -> int:
         args.execute,
         args.api_mode,
         size_override,
+        args.model,
     )
     print(f"Package written to {package_dir}")
-    return 0
+    return package_exit_code(package_dir)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,7 @@ class TextImageForm:
     base_url: str
     api_key: str
     text_model: str = ""
+    image_model: str = "gpt-image-2"
 
 
 def build_text_image_command(form: TextImageForm):
@@ -103,6 +104,8 @@ def build_text_image_command(form: TextImageForm):
         form.image_size,
         "--quality",
         form.quality,
+        "--model",
+        form.image_model.strip() or "gpt-image-2",
     ]
     # 文本模型：脚本据此把中文画面提示词中译英再喂图像模型（两种模式都译）。
     if form.text_model.strip():
@@ -210,6 +213,7 @@ class GptForm:
     description: str
     base_url: str
     api_key: str
+    image_model: str = "gpt-image-2"
 
 
 def build_gpt_command(form: GptForm):
@@ -241,6 +245,8 @@ def build_gpt_command(form: GptForm):
         # 仅供 CLI，GUI 恒定传 edit。
         "--api-mode",
         "edit",
+        "--model",
+        form.image_model.strip() or "gpt-image-2",
     ]
     description = form.description.strip()
     if description:

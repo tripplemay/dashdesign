@@ -150,10 +150,8 @@ class ProgressPanel(QGroupBox):
             return
 
         if model.finished:
-            self.bar.setRange(0, 1)
-            self.bar.setValue(1)
-            self.status_label.setText(f"已完成 · 用时 {_fmt_duration(elapsed_seconds)}")
-            self.hint_label.setText("")
+            outcome = model.outcome or ("failed" if model.had_failure else "success")
+            self.finalize(model, outcome in {"success", "prepared"}, elapsed_seconds, outcome)
             return
 
         if model.is_determinate():
@@ -196,7 +194,7 @@ class ProgressPanel(QGroupBox):
         remaining = elapsed_seconds / done * (total - done)
         return "约 " + _fmt_duration(round(remaining))
 
-    def finalize(self, model: ProgressModel, success: bool, elapsed_seconds: int) -> None:
+    def finalize(self, model: ProgressModel, success: bool, elapsed_seconds: int, outcome: str = "") -> None:
         colors = theme.current_tokens()
         # 先把阶段状态收尾，再重绘阶段行，让失败所在阶段显示为失败而非"进行中"。
         if success:
@@ -219,3 +217,8 @@ class ProgressPanel(QGroupBox):
             self.status_label.setText(f"运行失败 · 用时 {_fmt_duration(elapsed_seconds)}")
             self.status_label.setStyleSheet(f"color: {colors['error_fg']};")
             self.hint_label.setText("详情见失败提示；可用“文件 → 导出运行日志”保存完整输出以便排查。")
+        if outcome in {"partial", "cancelled", "prepared"}:
+            label = {"partial": "部分成功", "cancelled": "已取消", "prepared": "请求包已准备，未调用 API"}[outcome]
+            self.status_label.setText(f"{label} · 用时 {_fmt_duration(elapsed_seconds)}")
+            self.status_label.setStyleSheet(f"color: {colors['warning_fg']};" if outcome != "prepared" else "")
+            self.hint_label.setText(model.result_message)

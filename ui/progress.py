@@ -25,6 +25,9 @@ class ProgressEvent:
     index: Optional[int] = None  # stage / step (1-based)
     total: Optional[int] = None  # step
     state: Optional[str] = None  # step: start|ok|skip|fail
+    outcome: str = ""
+    message: str = ""
+    completed: int = 0
 
 
 def parse_progress_line(line: str) -> Optional[ProgressEvent]:
@@ -57,6 +60,18 @@ def parse_progress_line(line: str) -> Optional[ProgressEvent]:
         )
     if kind == "done":
         return ProgressEvent(kind="done", label=str(payload.get("label", "")))
+    if kind == "result":
+        outcome = str(payload.get("outcome", ""))
+        if outcome not in {"prepared", "success", "partial", "failed", "cancelled"}:
+            return None
+        completed, total = _as_int(payload.get("completed")), _as_int(payload.get("total"))
+        if completed is None or total is None or not 0 <= completed <= total:
+            return None
+        if outcome == "success" and (total == 0 or completed != total):
+            return None
+        return ProgressEvent(kind="result", label=str(payload.get("label", "")),
+                             outcome=outcome, message=str(payload.get("message", "")),
+                             completed=completed, total=total)
     return None
 
 
@@ -98,11 +113,22 @@ class ProgressModel:
     step_done: int = 0
     step_label: str = ""
     step_failed: bool = False
+    had_failure: bool = False
+    outcome: str = ""
+    result_message: str = ""
+    result_completed: int = 0
+    result_total: int = 0
 
     def apply(self, event: ProgressEvent) -> None:
         self.has_signal = True
         if event.kind == "plan":
             self.stages = [StageState(label) for label in (event.labels or [])]
+            self.had_failure = False
+            self.outcome = ""
+            self.finished = False
+            self.done_label = ""
+            self.result_message = ""
+            self.result_completed = self.result_total = 0
             self._reset_steps()
         elif event.kind == "stage":
             self._advance_stage(event.index)
@@ -111,14 +137,25 @@ class ProgressModel:
         elif event.kind == "done":
             self.finished = True
             self.done_label = event.label
-            for stage in self.stages:
-                if stage.status in (PENDING, RUNNING):
-                    stage.status = OK
+            if not self.had_failure and self.outcome in {"", "success", "prepared"}:
+                self.mark_all_ok()
             if self.step_total:
                 self.step_done = self.step_total
+        elif event.kind == "result":
+            self.finished = True
+            self.done_label = event.label
+            self.outcome = event.outcome
+            self.result_message = event.message
+            self.result_completed = event.completed
+            self.result_total = event.total or 0
+            if event.outcome in {"failed", "partial", "cancelled"}:
+                self.had_failure = True
+                self.mark_failed()
 
     def mark_all_ok(self) -> None:
         """成功收尾：未完成的阶段全部标记为完成。"""
+        if self.had_failure:
+            return
         for stage in self.stages:
             if stage.status in (PENDING, RUNNING):
                 stage.status = OK
@@ -129,6 +166,7 @@ class ProgressModel:
             if stage.status == RUNNING:
                 stage.status = FAIL
         self.step_failed = True
+        self.had_failure = True
 
     def _reset_steps(self) -> None:
         self.step_total = 0
@@ -162,6 +200,10 @@ class ProgressModel:
                 self.step_done = max(self.step_done, event.index)
             if event.state == "fail":
                 self.step_failed = True
+                self.had_failure = True
+                for stage in self.stages:
+                    if stage.status == RUNNING:
+                        stage.status = FAIL
 
     # -- Derived, read-only helpers for the panel --------------------------
     def current_stage_index(self) -> int:
@@ -175,3 +217,21 @@ class ProgressModel:
 
     def is_determinate(self) -> bool:
         return self.step_total > 0
+
+
+def resolve_outcome(model: ProgressModel, exit_code: int, *, strict: bool = False,
+                    cancelled: bool = False, crashed: bool = False) -> str:
+    """Never infer image success from exit 0 without the result contract."""
+    if cancelled:
+        return "cancelled"
+    if crashed:
+        return "failed"
+    if model.outcome in {"failed", "cancelled"}:
+        return model.outcome
+    if model.outcome == "partial":
+        return "partial" if exit_code == 3 else "failed"
+    if exit_code != 0 or model.had_failure:
+        return "failed"
+    if strict and not model.outcome:
+        return "failed"
+    return model.outcome or "success"

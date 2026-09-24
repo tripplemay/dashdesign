@@ -121,6 +121,7 @@ class GptPage(QWidget):
 
     def form(self) -> GptForm:
         return GptForm(
+            image_model=api_config.load_image_model(),
             source=self.gpt_source.text(),
             output_dir=workspace.effective_output_dir(
                 default_output("workflow_samples", "desktop_gpt_image_rebuild_qt"),

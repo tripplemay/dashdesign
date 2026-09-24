@@ -188,6 +188,7 @@ class TestMainSizeOverrideGlue:
             return tmp_path / "pkg"
 
         monkeypatch.setattr(rebuild, "build_package", _spy)
+        monkeypatch.setattr(rebuild, "package_exit_code", lambda package: 0)
         monkeypatch.setattr(
             sys,
             "argv",

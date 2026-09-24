@@ -18,6 +18,7 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 import progress
+from workflow_result import checkpoint, create_package_dir, finish, package_exit_code, run_step
 
 from image_api_client import execute_image_generation
 from prompt_translate import translate_visual_prompt
@@ -1388,7 +1389,7 @@ def build_package(
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     package_dir = output_dir / f"{timestamp}_{cm_label(width_cm)}x{cm_label(height_cm)}_{mode}_t2i"
-    package_dir.mkdir(parents=True, exist_ok=True)
+    package_dir = create_package_dir(package_dir)
 
     master_name = f"master.{output_suffix(output_format)}"
     poster_master_output = package_dir / "poster_master.png"
@@ -1450,7 +1451,9 @@ def build_package(
     }
     if execute:
         _advance("调用图像 API")
-        status["image_generation"] = execute_image_generation(payload, package_dir / master_name)
+        checkpoint(package_dir, status)
+        status["image_generation"] = run_step(execute_image_generation, payload, package_dir / master_name)
+        checkpoint(package_dir, status)
         if (
             isinstance(status["image_generation"], dict)
             and status["image_generation"].get("status") == "generated"
@@ -1459,15 +1462,16 @@ def build_package(
                 generated_image_audit(package_dir / master_name, image_size, width_cm, height_cm)
             )
             if mode == MODE_POSTER:
-                status["poster_master"] = compose_poster_copy(
+                status["poster_master"] = run_step(compose_poster_copy,
                     package_dir / master_name,
                     poster_master_output,
                     poster_copy,
                     dpi,
                     text_style,
                 )
+                checkpoint(package_dir, status)
 
-            if postprocess_print:
+            if postprocess_print and status["poster_master"].get("status") != "cancelled":
                 if not status["image_generation"].get("orientation_matches_target"):
                     status["print_output"] = {
                         "status": "skipped",
@@ -1482,7 +1486,7 @@ def build_package(
                         }
                 else:
                     _advance("印刷后处理")
-                    status["print_output"] = prepare_print_output(
+                    status["print_output"] = run_step(prepare_print_output,
                         package_dir / master_name,
                         print_background_output,
                         width_cm,
@@ -1492,8 +1496,9 @@ def build_package(
                         realesrgan_model_dir,
                         realesrgan_model,
                     )
-                    if mode == MODE_POSTER:
-                        status["poster_print_output"] = compose_poster_copy(
+                    checkpoint(package_dir, status)
+                    if mode == MODE_POSTER and status["print_output"].get("status") == "generated":
+                        status["poster_print_output"] = run_step(compose_poster_copy,
                             print_background_output,
                             poster_print_output,
                             poster_copy,
@@ -1532,7 +1537,7 @@ def build_package(
                 }
 
     _advance("完成")
-    write_json(package_dir / "status.json", status)
+    checkpoint(package_dir, status)
     readme = textwrap.dedent(
         f"""
         # Baseline Text-to-Image Package
@@ -1556,7 +1561,14 @@ def build_package(
         """
     ).strip()
     (package_dir / "README.md").write_text(readme + "\n", encoding="utf-8")
-    progress.done(str(package_dir))
+    required = [status["image_generation"]]
+    if mode == MODE_POSTER:
+        required.append(status["poster_master"])
+    if postprocess_print:
+        required.append(status["print_output"])
+        if mode == MODE_POSTER:
+            required.append(status["poster_print_output"])
+    finish(package_dir, status, execute, [required])
     return package_dir
 
 
@@ -1654,7 +1666,7 @@ def main() -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
     print(f"Package written to {package_dir}")
-    return 0
+    return package_exit_code(package_dir)
 
 
 if __name__ == "__main__":

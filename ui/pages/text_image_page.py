@@ -362,6 +362,7 @@ class TextImagePage(QWidget):
             base_url=api_config.load_base_url(),
             api_key=api_config.load_api_key(),
             text_model=api_config.load_baseline_model(),
+            image_model=api_config.load_image_model(),
         )
 
     def input_preview_path(self) -> "Path | None":

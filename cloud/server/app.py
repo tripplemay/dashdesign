@@ -326,7 +326,10 @@ def create_app(
     ):
         # Gated by the admin password only — the admin needs no bearer token.
         _verify_admin_password(store, x_admin_password)
-        return store.set_app_config(body.model_dump(), updated_by="admin")
+        # Older clients do not submit new fields; do not reset those fields.
+        config = store.get_app_config()
+        config.update(body.model_dump(exclude_unset=True))
+        return store.set_app_config(config, updated_by="admin")
 
     @app.post("/admin/verify", response_model=schemas.AdminVerifyOut)
     def admin_verify(
