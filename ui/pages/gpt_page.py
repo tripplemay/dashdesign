@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import uuid
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGridLayout,
@@ -11,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -25,8 +29,17 @@ from ui.widgets import PathField
 
 
 class GptPage(QWidget):
+    resumeRequested = Signal()
+
     def __init__(self, parent: "QWidget | None" = None) -> None:
         super().__init__(parent)
+        self._pending_package = None
+        self._pending_signature = None
+        self._submitted_signature = None
+        self._pending_revision = None
+        self._resume_package = ""
+        self._answer_file = ""
+        self._running = False
         layout = scrollable_page_layout(self)
 
         paths = QGroupBox("图片与输出")
@@ -51,7 +64,7 @@ class GptPage(QWidget):
         self.gpt_description = QPlainTextEdit()
         self.gpt_description.setObjectName("TextPrompt")
         self.gpt_description.setPlaceholderText(
-            "用一句话说明要怎么改，例如：把背景换成蓝天草地、去掉左下角的文字。"
+            "直接说明要怎么改，AI 会结合原图整理修改指令；不明确时会先询问，不直接出图。"
         )
         self.gpt_description.setMaximumHeight(96)
         settings_layout.addWidget(self.gpt_description, 0, 1)
@@ -91,6 +104,39 @@ class GptPage(QWidget):
         settings_layout.addLayout(dpi_row, 2, 1)
         settings_layout.setColumnStretch(1, 1)
         layout.addWidget(settings_group)
+
+        self.interpretation_group = QGroupBox("AI 理解结果（展开查看）")
+        self.interpretation_group.setCheckable(True)
+        self.interpretation_group.setChecked(False)
+        interpretation_layout = QVBoxLayout(self.interpretation_group)
+        self.interpretation_text = QPlainTextEdit()
+        self.interpretation_text.setReadOnly(True)
+        self.interpretation_text.setPlaceholderText("转写后显示中文修改摘要和最终提示词，不会覆盖你的原始要求。")
+        self.interpretation_text.setMaximumHeight(220)
+        interpretation_layout.addWidget(self.interpretation_text)
+        self.interpretation_text.setVisible(False)
+        self.interpretation_group.toggled.connect(self.interpretation_text.setVisible)
+        layout.addWidget(self.interpretation_group)
+
+        self.clarification_group = QGroupBox("补充修改要求")
+        clarification_layout = QVBoxLayout(self.clarification_group)
+        self.clarification_question = QLabel()
+        self.clarification_question.setTextFormat(Qt.TextFormat.PlainText)
+        self.clarification_question.setWordWrap(True)
+        self.clarification_answer = QPlainTextEdit()
+        self.clarification_answer.setPlaceholderText("回答上面的问题，原始要求会一并保留。")
+        self.clarification_answer.setMaximumHeight(85)
+        self.resume_button = QPushButton("补充并继续")
+        self.resume_button.clicked.connect(lambda: self.resumeRequested.emit())
+        clarification_layout.addWidget(self.clarification_question)
+        clarification_layout.addWidget(self.clarification_answer)
+        clarification_layout.addWidget(self.resume_button)
+        self.clarification_group.hide()
+        layout.addWidget(self.clarification_group)
+        self.gpt_source.edit.textChanged.connect(self._invalidate_pending)
+        self.gpt_description.textChanged.connect(self._invalidate_pending)
+        for spin in (self.gpt_width_cm, self.gpt_height_cm, self.gpt_dpi):
+            spin.valueChanged.connect(self._invalidate_pending)
         layout.addStretch(1)
         self.refresh_workspace()
 
@@ -121,6 +167,10 @@ class GptPage(QWidget):
 
     def form(self) -> GptForm:
         return GptForm(
+            optimize_prompt=True,
+            agent_model=api_config.load_edit_agent_model(),
+            resume_package=self._resume_package,
+            answer_file=self._answer_file,
             image_model=api_config.load_image_model(),
             source=self.gpt_source.text(),
             output_dir=workspace.effective_output_dir(
@@ -134,6 +184,79 @@ class GptPage(QWidget):
             base_url=api_config.load_base_url(),
             api_key=api_config.load_api_key(),
         )
+
+    def _signature(self) -> tuple:
+        source = Path(self.gpt_source.text()).expanduser()
+        try:
+            stat = source.stat()
+            stamp = (stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            stamp = None
+        return (str(source.resolve()), stamp, self.gpt_description.toPlainText(),
+                self.gpt_width_cm.value(), self.gpt_height_cm.value(), self.gpt_dpi.value(),
+                api_config.load_edit_agent_model(), api_config.load_image_model())
+
+    def _invalidate_pending(self, *args) -> None:
+        self._pending_package = self._pending_signature = None
+        self._pending_revision = None
+        self._resume_package = self._answer_file = ""
+        self.clarification_group.hide()
+        self.interpretation_text.clear()
+
+    def prepare_run(self) -> None:
+        signature = self._signature()
+        self._resume_package = self._answer_file = ""
+        if self._pending_package is not None and signature == self._pending_signature:
+            state = json.loads((self._pending_package / "edit_state.json").read_text(encoding="utf-8"))
+            if state["revision"] != self._pending_revision:
+                raise ValueError("当前问题已过期，请重新开始任务，不能提交旧问题的回答")
+            if state["phase"] == "needs_input":
+                answer = self.clarification_answer.toPlainText().strip()
+                if not answer:
+                    raise ValueError("请先回答 Agent 的问题，再继续修改")
+                directory = self._pending_package / "answers"
+                directory.mkdir(exist_ok=True)
+                path = directory / (uuid.uuid4().hex + ".json")
+                path.write_text(json.dumps({"revision": state["revision"], "answer": answer}, ensure_ascii=False), encoding="utf-8")
+                self._answer_file = str(path)
+            elif state["phase"] != "agent_failed":
+                raise ValueError("任务状态已变化，不能重复续跑，请重新填写修改要求")
+            self._resume_package = str(self._pending_package)
+        else:
+            self._invalidate_pending()
+        self._submitted_signature = signature
+
+    def set_running(self, running: bool) -> None:
+        self._running = running
+        self.resume_button.setEnabled(not running)
+
+    def show_interpretation(self, summary: str, prompt: str) -> None:
+        if self._signature() == self._submitted_signature:
+            self.interpretation_text.setPlainText(summary + ("\n\n最终提示词：\n" + prompt if prompt else ""))
+
+    def finish_edit(self, package: Path, outcome: str) -> None:
+        if self._signature() != self._submitted_signature:
+            return
+        self._pending_package = self._pending_signature = None
+        self._resume_package = self._answer_file = ""
+        self.clarification_group.hide()
+        if outcome == "cancelled":
+            return
+        try:
+            state = json.loads((package / "edit_state.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if state.get("phase") not in {"needs_input", "agent_failed"}:
+            return
+        self._pending_package, self._pending_signature = package, self._submitted_signature
+        self._pending_revision = state["revision"]
+        needs_input = state["phase"] == "needs_input"
+        self.clarification_question.setText(state["question"] if needs_input else "Agent 转写失败，尚未调用图片模型。可重试转写或修改原始要求。")
+        self.clarification_answer.clear()
+        self.clarification_answer.setVisible(needs_input)
+        self.resume_button.setText("补充并继续" if needs_input else "重试转写")
+        self.resume_button.setEnabled(not self._running)
+        self.clarification_group.show()
 
     def input_preview_path(self) -> "Path | None":
         if not self.gpt_source.text():

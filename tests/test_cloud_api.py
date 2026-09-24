@@ -262,6 +262,13 @@ class TestRoles:
 
 
 class TestAppConfigAndAdmin:
+    def test_old_client_write_preserves_edit_agent_model(self, client):
+        headers = {"X-Admin-Password": _ADMIN_PW}
+        assert client.get("/app-config", headers=_h(_ADMIN)).json()["edit_agent_model"] == ""
+        assert client.put("/app-config", json={"edit_agent_model": "vision-custom"}, headers=headers).status_code == 200
+        updated = client.put("/app-config", json={"image_model": "image-custom"}, headers=headers)
+        assert updated.json()["edit_agent_model"] == "vision-custom"
+
     def test_old_client_write_preserves_image_model(self, client):
         headers = {"X-Admin-Password": _ADMIN_PW}
         assert client.get("/app-config", headers=_h(_ADMIN)).json()["image_model"] == "gpt-image-2"

@@ -28,6 +28,8 @@ class ProgressEvent:
     outcome: str = ""
     message: str = ""
     completed: int = 0
+    summary: str = ""
+    prompt: str = ""
 
 
 def parse_progress_line(line: str) -> Optional[ProgressEvent]:
@@ -60,9 +62,13 @@ def parse_progress_line(line: str) -> Optional[ProgressEvent]:
         )
     if kind == "done":
         return ProgressEvent(kind="done", label=str(payload.get("label", "")))
+    if kind == "interpretation":
+        if not all(isinstance(payload.get(key), str) for key in ("label", "summary", "prompt")):
+            return None
+        return ProgressEvent(kind="interpretation", label=payload["label"], summary=payload["summary"], prompt=payload["prompt"])
     if kind == "result":
         outcome = str(payload.get("outcome", ""))
-        if outcome not in {"prepared", "success", "partial", "failed", "cancelled"}:
+        if outcome not in {"prepared", "success", "partial", "failed", "cancelled", "needs_input"}:
             return None
         completed, total = _as_int(payload.get("completed")), _as_int(payload.get("total"))
         if completed is None or total is None or not 0 <= completed <= total:
@@ -85,6 +91,7 @@ def _as_int(value: object) -> Optional[int]:
 # Stage status values used by the panel.
 PENDING = "pending"
 RUNNING = "running"
+WAITING = "waiting"
 OK = "ok"
 SKIP = "skip"
 FAIL = "fail"
@@ -151,6 +158,10 @@ class ProgressModel:
             if event.outcome in {"failed", "partial", "cancelled"}:
                 self.had_failure = True
                 self.mark_failed()
+            elif event.outcome == "needs_input":
+                for stage in self.stages:
+                    if stage.status == RUNNING:
+                        stage.status = WAITING
 
     def mark_all_ok(self) -> None:
         """成功收尾：未完成的阶段全部标记为完成。"""
@@ -230,6 +241,8 @@ def resolve_outcome(model: ProgressModel, exit_code: int, *, strict: bool = Fals
         return model.outcome
     if model.outcome == "partial":
         return "partial" if exit_code == 3 else "failed"
+    if model.outcome == "needs_input":
+        return "needs_input" if exit_code == 4 and not model.had_failure else "failed"
     if exit_code != 0 or model.had_failure:
         return "failed"
     if strict and not model.outcome:

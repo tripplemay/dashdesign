@@ -214,6 +214,10 @@ class GptForm:
     base_url: str
     api_key: str
     image_model: str = "gpt-image-2"
+    optimize_prompt: bool = False
+    agent_model: str = ""
+    resume_package: str = ""
+    answer_file: str = ""
 
 
 def build_gpt_command(form: GptForm):
@@ -221,6 +225,8 @@ def build_gpt_command(form: GptForm):
     output_dir = Path(form.output_dir).expanduser()
     if not source.exists():
         raise ValueError("源图片不存在")
+    if form.optimize_prompt and not form.description.strip():
+        raise ValueError("请填写修改要求")
     try:
         width_cm = float(form.width_cm.strip())
         height_cm = float(form.height_cm.strip())
@@ -251,6 +257,12 @@ def build_gpt_command(form: GptForm):
     description = form.description.strip()
     if description:
         command += ["--description", description]
+    if form.optimize_prompt:
+        command += ["--optimize-prompt", "--agent-model", form.agent_model.strip()]
+    if form.resume_package:
+        command += ["--resume-package", form.resume_package]
+        if form.answer_file:
+            command += ["--answer-file", form.answer_file]
     command.append("--execute")  # GUI 无离线模式：始终调用 API
     return command, output_dir, api_env(form.base_url, form.api_key)
 

@@ -63,9 +63,13 @@ def test_settings_load_and_save_image_model_without_network(monkeypatch):
     dialog.local_api_base.setText("https://sandbox.invalid/v1")
     dialog.local_api_key.setText("fake-key")
     dialog.local_image_model.setText("new-local-image")
+    dialog.local_agent_model.setText("new-local-agent")
     dialog._save_local_api()
     assert save.call_args.args[3] == "new-local-image"
+    assert save.call_args.args[4] == "new-local-agent"
     dialog.cfg_image_model.setText("new-cloud-image")
+    dialog.cfg_agent_model.setText("new-cloud-agent")
     dialog._save_cloud()
     assert push.call_args.args[1]["image_model"] == "new-cloud-image"
+    assert push.call_args.args[1]["edit_agent_model"] == "new-cloud-agent"
     dialog.close()

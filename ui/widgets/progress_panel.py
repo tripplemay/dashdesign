@@ -20,11 +20,12 @@ from PySide6.QtWidgets import (
 )
 
 from ui import theme
-from ui.progress import FAIL, OK, PENDING, RUNNING, SKIP, ProgressModel
+from ui.progress import FAIL, OK, PENDING, RUNNING, SKIP, WAITING, ProgressModel
 
 _STATUS_ICON = {
     PENDING: "mdi6.circle-outline",
     RUNNING: "mdi6.progress-clock",
+    WAITING: "mdi6.pause-circle-outline",
     OK: "mdi6.check-circle",
     SKIP: "mdi6.minus-circle-outline",
     FAIL: "mdi6.close-circle",
@@ -59,6 +60,7 @@ class _StageRow(QWidget):
         color = {
             PENDING: colors["subtitle_fg"],
             RUNNING: colors["accent"],
+            WAITING: colors["warning_fg"],
             OK: colors["success_fg"],
             SKIP: colors["subtitle_fg"],
             FAIL: colors["error_fg"],
@@ -199,7 +201,7 @@ class ProgressPanel(QGroupBox):
         # 先把阶段状态收尾，再重绘阶段行，让失败所在阶段显示为失败而非"进行中"。
         if success:
             model.mark_all_ok()
-        else:
+        elif outcome != "needs_input":
             model.mark_failed()
         self._ensure_rows([stage.label for stage in model.stages])
         for row, stage in zip(self._rows, model.stages):
@@ -217,8 +219,8 @@ class ProgressPanel(QGroupBox):
             self.status_label.setText(f"运行失败 · 用时 {_fmt_duration(elapsed_seconds)}")
             self.status_label.setStyleSheet(f"color: {colors['error_fg']};")
             self.hint_label.setText("详情见失败提示；可用“文件 → 导出运行日志”保存完整输出以便排查。")
-        if outcome in {"partial", "cancelled", "prepared"}:
-            label = {"partial": "部分成功", "cancelled": "已取消", "prepared": "请求包已准备，未调用 API"}[outcome]
+        if outcome in {"partial", "cancelled", "prepared", "needs_input"}:
+            label = {"partial": "部分成功", "cancelled": "已取消", "prepared": "请求包已准备，未调用 API", "needs_input": "待补充，未调用图片模型"}[outcome]
             self.status_label.setText(f"{label} · 用时 {_fmt_duration(elapsed_seconds)}")
             self.status_label.setStyleSheet(f"color: {colors['warning_fg']};" if outcome != "prepared" else "")
             self.hint_label.setText(model.result_message)

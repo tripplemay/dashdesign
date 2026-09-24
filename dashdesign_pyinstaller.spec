@@ -94,6 +94,7 @@ COMMON_HIDDEN_IMPORTS = [
     "argparse",
     "base64",
     "csv",
+    "contextlib",
     "dataclasses",
     "datetime",
     "fnmatch",

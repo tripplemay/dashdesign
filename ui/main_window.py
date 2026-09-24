@@ -263,6 +263,7 @@ class DashDesignQtApp(QMainWindow):
         self.text_image_page = TextImagePage()
         self.batch_page = BatchPage()
         self.gpt_page = GptPage()
+        self.gpt_page.resumeRequested.connect(self._resume_image_edit)
         self.qr_page = QrPage()
         self.pages = [
             self.baseline_page,
@@ -511,6 +512,8 @@ class DashDesignQtApp(QMainWindow):
 
     def _set_running(self, running: bool) -> None:
         self._running = running
+        if hasattr(self, "gpt_page"):
+            self.gpt_page.set_running(running)
         self._update_run_controls()
         if running:
             self._elapsed.start()
@@ -543,8 +546,10 @@ class DashDesignQtApp(QMainWindow):
             return
         current_page = self.pages[self.nav.currentRow()] if self.nav.currentRow() >= 0 else None
         try:
+            if current_page is self.gpt_page:
+                self.gpt_page.prepare_run()
             command, output_dir, env_updates = self.build_current_command()
-        except ValueError as exc:
+        except (ValueError, OSError) as exc:
             self.banner.show_message("error", f"参数错误：{exc}")
             if current_page is not None and hasattr(current_page, "on_validation_error"):
                 current_page.on_validation_error()
@@ -588,6 +593,11 @@ class DashDesignQtApp(QMainWindow):
         self.process.errorOccurred.connect(self.process_error)
         self.process.start(command[0], command[1:])
 
+    def _resume_image_edit(self) -> None:
+        if self.process is None:
+            self.nav.setCurrentRow(3)
+            self.run_current()
+
     def process_error(self, error) -> None:  # type: ignore[no-untyped-def]
         # 启动失败时 finished 永不触发，必须在这里复位运行状态；
         # 其他错误（如 Crashed）仍由 process_finished 统一收尾。
@@ -629,6 +639,8 @@ class DashDesignQtApp(QMainWindow):
         event = parse_progress_line(line)
         if event is not None:
             self._progress.apply(event)
+            if event.kind == "interpretation" and self._running_worker == "gpt":
+                self.gpt_page.show_interpretation(event.summary, event.prompt)
             self._render_progress()
             return
         if line.strip():
@@ -674,7 +686,13 @@ class DashDesignQtApp(QMainWindow):
             # 与 process_error 分支一致：释放已结束的 QProcess，避免多次运行累积。
             process.deleteLater()
         workflow = self._running_title or "工作流"
-        if outcome in {"partial", "cancelled"}:
+        if self._running_worker == "gpt" and self._progress.done_label:
+            self.gpt_page.finish_edit(Path(self._progress.done_label), outcome)
+        if outcome == "needs_input":
+            self.statusBar().showMessage("待补充 · 尚未调用图片模型")
+            self.banner.show_message("info", self._progress.result_message,
+                                     action_label="补充要求", action_callback=lambda: self.nav.setCurrentRow(3))
+        elif outcome in {"partial", "cancelled"}:
             label = "部分成功" if outcome == "partial" else "已取消"
             detail = self._progress.result_message or "上游请求可能仍在执行；请勿立即重复提交。"
             if outcome == "partial":

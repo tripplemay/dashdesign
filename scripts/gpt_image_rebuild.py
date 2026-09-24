@@ -422,7 +422,7 @@ def write_curl_script(
 
 
 def build_package(
-    source: Path,
+    source: Path | None,
     output_dir: Path,
     print_dpi: int,
     description: str | None,
@@ -430,7 +430,21 @@ def build_package(
     api_mode: str,
     size_override: tuple[int | float, int | float] | None = None,
     model: str = "gpt-image-2",
+    optimize_prompt: bool = False,
+    agent_model: str = "",
+    resume_package: Path | None = None,
+    answer_file: Path | None = None,
 ) -> Path:
+    if optimize_prompt or resume_package is not None:
+        if api_mode != "edit":
+            raise ValueError("Agent 转写仅支持 edit 模式")
+        from edit_prompt_workflow import build_agent_package
+        return build_agent_package(
+            source, output_dir, print_dpi, description, execute, size_override,
+            model, agent_model, resume_package, answer_file,
+            build_profile=build_profile, save_preview=save_preview,
+            build_payload=build_image_edit_payload, execute_image_request=execute_image_request,
+        )
     _stages = ["解析源图", "生成预览与请求包"]
     if execute:
         _stages.append("调用图像 API")
@@ -569,7 +583,11 @@ def build_package(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path, help="Source image to rebuild.")
+    parser.add_argument("source", type=Path, nargs="?", help="Source image to rebuild.")
+    parser.add_argument("--optimize-prompt", action="store_true", help="Interpret the edit with a vision Agent before image editing.")
+    parser.add_argument("--agent-model", default="", help="Vision-capable chat model for edit interpretation.")
+    parser.add_argument("--resume-package", type=Path, help="Resume a prepared/clarification/Agent-failed task.")
+    parser.add_argument("--answer-file", type=Path, help="UTF-8 JSON with revision and answer for the pending question.")
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -614,12 +632,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    if args.source is None and args.resume_package is None:
+        parser.error("请提供原图或 --resume-package")
+    if args.answer_file is not None and args.resume_package is None:
+        parser.error("--answer-file 必须与 --resume-package 一起使用")
+    if args.optimize_prompt and args.resume_package is None and not args.agent_model.strip():
+        parser.error("Agent 转写需要 --agent-model 指定支持图文输入的文本模型")
     try:
         size_override = resolve_size_override(args.width_cm, args.height_cm)
     except ValueError as exc:
         parser.error(str(exc))
     package_dir = build_package(
-        args.source.resolve(),
+        args.source.resolve() if args.source else None,
         args.output_dir.resolve(),
         args.print_dpi,
         args.description,
@@ -627,6 +651,10 @@ def main() -> int:
         args.api_mode,
         size_override,
         args.model,
+        optimize_prompt=args.optimize_prompt,
+        agent_model=args.agent_model,
+        resume_package=args.resume_package,
+        answer_file=args.answer_file,
     )
     print(f"Package written to {package_dir}")
     return package_exit_code(package_dir)

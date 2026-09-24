@@ -79,6 +79,7 @@ class AppConfigModel(BaseModel):
     image_api_base_url: str = ""
     image_api_key: str = ""
     image_model: str = "gpt-image-2"
+    edit_agent_model: str = ""
     baseline_model: str = "gpt-4o"
     # Where clients fetch update-manifest.json (the VPS mirror, reachable where
     # GitHub is not); empty = fall back to the URL baked at build time.

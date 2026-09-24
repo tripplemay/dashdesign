@@ -55,3 +55,18 @@ def test_image_model_is_independent_and_cloud_wins(monkeypatch):
     assert api_config.load_image_model() == "cloud-image"
     monkeypatch.setattr(api_config, "_cloud", lambda: {"image_model": "  "})
     assert api_config.load_image_model() == "image-custom"
+
+
+def test_edit_agent_model_priority_and_legacy_save(monkeypatch):
+    monkeypatch.setattr(api_config, "_cloud", lambda: {})
+    api_config.save("https://gw/v1", "key", "text-custom", "image-custom")
+    assert api_config.load_edit_agent_model() == "text-custom"
+    api_config.save("https://gw/v1", "key", "text-custom", "image-custom", " vision-local ")
+    api_config.save("https://gw/v1", "key", "text-custom", "image-custom")
+    assert api_config.load_edit_agent_model() == "vision-local"
+    monkeypatch.setattr(api_config, "_cloud", lambda: {"edit_agent_model": " vision-cloud "})
+    assert api_config.load_edit_agent_model() == "vision-cloud"
+    monkeypatch.setattr(api_config, "_cloud", lambda: {"edit_agent_model": "", "baseline_model": "text-cloud"})
+    assert api_config.load_edit_agent_model() == "vision-local"
+    api_config.save("https://gw/v1", "key", "text-custom", "image-custom", "")
+    assert api_config.load_edit_agent_model() == "text-cloud"

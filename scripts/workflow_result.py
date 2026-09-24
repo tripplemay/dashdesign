@@ -13,7 +13,7 @@ from PIL import Image
 import progress
 from image_api_client import sanitized_error
 
-EXIT_CODES = {"prepared": 0, "success": 0, "failed": 1, "partial": 3, "cancelled": 130}
+EXIT_CODES = {"prepared": 0, "success": 0, "failed": 1, "partial": 3, "needs_input": 4, "cancelled": 130}
 
 
 def create_package_dir(path: Path) -> Path:
@@ -69,12 +69,14 @@ def finish(package: Path, status: dict, execute: bool, units: list[list[dict]], 
         outcome = "prepared"
     elif any(s.get("status") == "cancelled" for s in stages):
         outcome = "cancelled"
+    elif any(s.get("status") == "needs_input" for s in stages):
+        outcome = "needs_input"
     elif units and completed == total:
         outcome = "success"
     else:
         outcome = "partial" if usable else "failed"
     reasons = [str(s.get("reason") or s.get("error_type") or s.get("status")) for s in stages if s.get("status") != "generated"]
-    labels = {"prepared": "请求包已准备，未调用 API", "success": "生成成功", "partial": "部分成功，已保留可用产物", "failed": "生成失败", "cancelled": "已取消，上游执行结果可能未知"}
+    labels = {"prepared": "请求包已准备，未调用 API", "success": "生成成功", "partial": "部分成功，已保留可用产物", "failed": "生成失败", "cancelled": "已取消，上游执行结果可能未知", "needs_input": "待补充，尚未调用图片模型"}
     message = labels[outcome]
     if outcome not in {"prepared", "success"} and reasons:
         message += ": " + reasons[0]

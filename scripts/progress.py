@@ -63,3 +63,7 @@ def done(label: str = "") -> None:
 
 def result(label: str, value: dict) -> None:
     _emit({"kind": "result", "label": str(label), **value})
+
+
+def interpretation(label: str, summary: str, prompt: str) -> None:
+    _emit({"kind": "interpretation", "label": label, "summary": summary, "prompt": prompt})
